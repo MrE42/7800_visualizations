@@ -111,21 +111,32 @@ def embed_plot_7800_data(parent_frame, filepaths):
             if isinstance(widget, tk.Button) and widget['command'] == toolbar.configure_subplots:
                 widget.destroy()
 
+    # Hide Outliers Toggle
+    hide_outliers_var = tk.BooleanVar(value=True)
+
     def open_plot_options():
         options_win = tk.Toplevel(parent_frame)
         options_win.title("Plot Options")
-        options_win.geometry("250x100")
+        options_win.geometry("250x150")
+        options_win.iconbitmap(resource_path("assets/icon.ico"))
+
 
         tk.Label(options_win, text="Line Thickness:").pack(pady=5)
         slider = tk.Scale(options_win, from_=0.5, to=5.0, resolution=0.1, orient='horizontal')
         slider.set(1.5)
-        slider.pack(pady=5, padx=10)
+        slider.pack(pady=0, padx=10)
+
+        tk.Checkbutton(
+            options_win,
+            text="Hide Outliers from Zoom",
+            variable=hide_outliers_var
+        ).pack(pady=5)
 
         def apply():
             lw = float(slider.get())
             for line in lines.values():
                 line.set_linewidth(lw)
-            canvas.draw()
+            rescale()
 
         tk.Button(options_win, text="Apply", command=apply).pack(pady=5)
 
@@ -134,6 +145,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     control_frame = tk.Frame(parent_frame)
     control_frame.pack(side='right', fill='y')
+
+
+
 
     tk.Label(control_frame, text="Search Variable:", font=("Helvetica", 10, "bold")).pack(pady=(5, 2))
     search_var = tk.StringVar()
@@ -212,20 +226,38 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     update_listbox()
     update_legend()
-    # Auto-rescale
-    ymins, ymaxs = [], []
-    for l in lines.values():
-        if l.get_visible():
-            y = l.get_ydata()
-            y = y[np.isfinite(y)]
-            if y.size > 0:
-                ymins.append(np.min(y))
-                ymaxs.append(np.max(y))
-    if ymins and ymaxs:
-        ymin, ymax = min(ymins), max(ymaxs)
-        pad = (ymax - ymin) * 0.05
-        ax.set_ylim(ymin - pad, ymax + pad)
-    canvas.draw()
+
+    def rescale():
+        ymins, ymaxs = [], []
+
+        for var, line in lines.items():
+            if not line.get_visible():
+                continue
+
+            y_data = df[var]
+            conf = variable_config.get(var, {})
+
+            # For y-limits only, apply filtering if 'Hide Outliers' is active
+            if hide_outliers_var.get() and "typical" in conf:
+                low, high = conf["typical"]
+                filtered = y_data[(y_data >= low) & (y_data <= high)]
+            else:
+                filtered = y_data[np.isfinite(y_data)]
+
+            if filtered.empty:
+                continue
+
+            ymins.append(filtered.min())
+            ymaxs.append(filtered.max())
+
+        if ymins and ymaxs:
+            ymin, ymax = min(ymins), max(ymaxs)
+            pad = (ymax - ymin) * 0.05
+            ax.set_ylim(ymin - pad, ymax + pad)
+
+        canvas.draw()
+
+    rescale()
 
     search_var.trace_add('write', update_listbox)
 
@@ -245,20 +277,21 @@ def embed_plot_7800_data(parent_frame, filepaths):
         update_listbox()
         update_legend()
 
-        # Auto-rescale
-        ymins, ymaxs = [], []
-        for l in lines.values():
-            if l.get_visible():
-                y = l.get_ydata()
-                y = y[np.isfinite(y)]
-                if y.size > 0:
-                    ymins.append(np.min(y))
-                    ymaxs.append(np.max(y))
-        if ymins and ymaxs:
-            ymin, ymax = min(ymins), max(ymaxs)
-            pad = (ymax - ymin) * 0.05
-            ax.set_ylim(ymin - pad, ymax + pad)
-        canvas.draw()
+        rescale()
+        # Old Auto-rescale
+        # ymins, ymaxs = [], []
+        # for l in lines.values():
+        #     if l.get_visible():
+        #         y = l.get_ydata()
+        #         y = y[np.isfinite(y)]
+        #         if y.size > 0:
+        #             ymins.append(np.min(y))
+        #             ymaxs.append(np.max(y))
+        # if ymins and ymaxs:
+        #     ymin, ymax = min(ymins), max(ymaxs)
+        #     pad = (ymax - ymin) * 0.05
+        #     ax.set_ylim(ymin - pad, ymax + pad)
+        # canvas.draw()
 
     def ignore_event(event):
         return "break"

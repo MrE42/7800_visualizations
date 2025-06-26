@@ -15,7 +15,8 @@ class App:
         self.root = root
         self.root.title(f"7800 Data Viewer v{__version__}")
         self.root.geometry("650x250")
-        self.root.iconbitmap(resource_path("assets/icon.ico"))
+        icon_path = resource_path("assets/icon.ico")
+        root.iconbitmap(icon_path)
         self.root.resizable(False, False)
 
         top_frame = tk.Frame(root)
