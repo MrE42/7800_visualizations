@@ -3,17 +3,78 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 import pandas as pd
 import numpy as np
 import tkinter as tk
-from file_parsing import parse_7800_data_file
+from unicodedata import normalize
 
 
-def embed_plot_7800_data(parent_frame, filepath):
-    df, model = parse_7800_data_file(filepath)
+import os
+import json
+from file_parsing import load_and_merge_files, resource_path
 
+def embed_plot_7800_data(parent_frame, filepaths):
+    df, model, metadata = load_and_merge_files(filepaths)
     time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
     x = df[time_col]
 
+    # Load range config for this model
+    config_path = resource_path(os.path.join("assets", f"{model}.json"))
+    variable_config = {}
+
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            raw_config = json.load(f)
+
+            def normalize_key(key):
+                return normalize('NFC', key.strip())
+
+            normalized_config = {normalize_key(k): v for k, v in raw_config.items()}
+
+            print("\n📄 Normalized config keys:")
+            for key in normalized_config:
+                print(f"  - {repr(key)}")
+
+            print("\n📊 Normalized DataFrame columns:")
+            for col in df.columns:
+                norm_col = normalize_key(col)
+                print(f"  - {repr(norm_col)}")
+                if norm_col in normalized_config:
+                    variable_config[col] = normalized_config[norm_col]
+                else:
+                    print(f"    ⚠️  No match found for: {repr(norm_col)}")
+    else:
+        print("<UNK> Config file not found.")
+
+
+
+    # Classify variable statuses
+    validation_results = {}
+    for var, conf in variable_config.items():
+        col_data = df.get(var)
+        if col_data is None:
+            continue
+        values = col_data.dropna()
+
+        status = "unclassified"
+        if "absolute" in conf and conf["absolute"][0] is not None and conf["absolute"][1] is not None:
+            out_abs = (values < conf["absolute"][0]) | (values > conf["absolute"][1])
+            if out_abs.any():
+                status = "outside absolute"
+            else:
+                if "typical" in conf and conf["typical"][0] is not None and conf["typical"][1] is not None:
+                    out_typ = (values < conf["typical"][0]) | (values > conf["typical"][1])
+                    if out_typ.any():
+                        status = "outside typical"
+                    else:
+                        status = "within typical"
+                else:
+                    status = "within absolute"
+        validation_results[var] = status
+
+    print("Loaded model config keys:", list(variable_config.keys()))
+    print("Available DataFrame columns:", list(df.columns))
+    print(model)
+    serial = metadata.get("SN", "Unknown SN")
     fig, ax = plt.subplots(figsize=(8, 5))
-    fig.suptitle(f"LI-78{model[2]}{model[3]} Data Visualization", fontsize=14)
+    fig.suptitle(f"LI-78{model[2]}{model[3]}: {serial}", fontsize=14)
     lines = {}
     colors = {}
 
@@ -21,9 +82,14 @@ def embed_plot_7800_data(parent_frame, filepath):
         if col == time_col:
             continue
         y = df[col]
-        line, = ax.plot(x, y, label=col, linewidth=1.5, visible=False)
+
+        config = variable_config.get(col, {})
+        should_plot = config.get("autoplot", False)
+
+        line, = ax.plot(x, y, label=col, linewidth=1.5, visible=should_plot)
         lines[col] = line
         colors[col] = line.get_color()
+
 
     ax.set_xlabel(time_col)
     ax.set_ylabel("Value")
@@ -74,11 +140,58 @@ def embed_plot_7800_data(parent_frame, filepath):
     search_entry = tk.Entry(control_frame, textvariable=search_var, width=30)
     search_entry.pack(padx=5, pady=(0, 5), fill='x')
 
-    listbox = tk.Listbox(control_frame, exportselection=False, height=20, width=30)
-    listbox.pack(padx=5, pady=5, fill='y', expand=True)
+    textbox = tk.Text(control_frame, height=20, width=40)
+    textbox.pack(padx=5, pady=5, fill='y', expand=True)
+    textbox.config(
+        state='disabled',
+        cursor='arrow',
+        exportselection=False,
+        highlightthickness=0,
+        bd=0,
+        wrap='none',
+        takefocus=0
+    )  # make it read-only after inserting
+
     variable_names = list(lines.keys())
-    for var in variable_names:
-        listbox.insert('end', f"☐ {var}")
+
+    # Updating the variable list
+    def update_listbox(*args):
+        search_term = search_var.get().lower()
+        textbox.config(state='normal')
+        textbox.delete("1.0", "end")
+
+        for var in variable_names:
+            if search_term not in var.lower():
+                continue
+
+            visible = lines[var].get_visible()
+            checkmark = "☑" if visible else "☐"
+            status = validation_results.get(var, "unclassified")
+            icon, color = {
+                "within typical": ("✅", "green"),
+                "outside typical": ("⚠️", "orange"),
+                "outside absolute": ("❌", "red"),
+                "unclassified": ("❓", "gray")
+            }.get(status, ("❓", "gray"))
+
+            line_text = f"{checkmark} {icon} {var}\n"
+            start_idx = textbox.index("end-1c")
+            end_idx = f"{start_idx}+{len(line_text)}c"
+            textbox.insert("end", line_text)
+            textbox.tag_add(var, start_idx, end_idx)
+            textbox.tag_config(var, foreground=color)
+
+        textbox.config(
+            state='disabled',
+            cursor='arrow',
+            exportselection=False,
+            highlightthickness=0,
+            bd=0,
+            wrap='none',
+            takefocus=0
+        )
+
+    update_listbox()
 
     legend_frame = tk.Frame(control_frame)
     legend_frame.pack(pady=5, fill='both', expand=False)
@@ -97,49 +210,82 @@ def embed_plot_7800_data(parent_frame, filepath):
                 label.pack(side='left')
                 legend_labels[var] = label
 
-    def update_listbox(*args):
-        search_term = search_var.get().lower()
-        listbox.delete(0, 'end')
-        for var in variable_names:
-            visible = lines[var].get_visible()
-            checkmark = '☑' if visible else '☐'
-            if search_term in var.lower():
-                listbox.insert('end', f"{checkmark} {var}")
+    update_listbox()
+    update_legend()
+    # Auto-rescale
+    ymins, ymaxs = [], []
+    for l in lines.values():
+        if l.get_visible():
+            y = l.get_ydata()
+            y = y[np.isfinite(y)]
+            if y.size > 0:
+                ymins.append(np.min(y))
+                ymaxs.append(np.max(y))
+    if ymins and ymaxs:
+        ymin, ymax = min(ymins), max(ymaxs)
+        pad = (ymax - ymin) * 0.05
+        ax.set_ylim(ymin - pad, ymax + pad)
+    canvas.draw()
 
     search_var.trace_add('write', update_listbox)
 
-    def toggle_selected(event=None):
-        selection = listbox.curselection()
-        for i in selection:
-            entry = listbox.get(i)
-            checkmark, var = entry[:1], entry[2:]
-            line = lines[var]
-            new_state = not line.get_visible()
-            line.set_visible(new_state)
+    # Toggling functionality
+    def toggle_variable_by_click(event=None):
+        idx = textbox.index("@%d,%d" % (event.x, event.y))
+        line = textbox.get(f"{idx} linestart", f"{idx} lineend")
+        parts = line.split(maxsplit=2)
+        if len(parts) < 3:
+            return
+        var = parts[2]
+        if var not in lines:
+            return
 
-        listbox.delete(0, 'end')
-        for var in variable_names:
-            visible = lines[var].get_visible()
-            checkmark = '☑' if visible else '☐'
-            listbox.insert('end', f"{checkmark} {var}")
+        line_obj = lines[var]
+        line_obj.set_visible(not line_obj.get_visible())
+        update_listbox()
+        update_legend()
 
+        # Auto-rescale
         ymins, ymaxs = [], []
-        for line in lines.values():
-            if line.get_visible():
-                y_data = line.get_ydata()
-                y_data = y_data[np.isfinite(y_data)]
-                if y_data.size > 0:
-                    ymins.append(np.min(y_data))
-                    ymaxs.append(np.max(y_data))
+        for l in lines.values():
+            if l.get_visible():
+                y = l.get_ydata()
+                y = y[np.isfinite(y)]
+                if y.size > 0:
+                    ymins.append(np.min(y))
+                    ymaxs.append(np.max(y))
         if ymins and ymaxs:
             ymin, ymax = min(ymins), max(ymaxs)
-            headroom = (ymax - ymin) * 0.05
-            ax.set_ylim(ymin - headroom, ymax + headroom)
-
-        update_legend()
+            pad = (ymax - ymin) * 0.05
+            ax.set_ylim(ymin - pad, ymax + pad)
         canvas.draw()
 
-    listbox.bind('<Double-1>', toggle_selected)
+    def ignore_event(event):
+        return "break"
+
+    for event in ("<Button-1>", "<B1-Motion>", "<Double-1>", "<Triple-1>", "<ButtonRelease-1>"):
+        textbox.bind(event, ignore_event)
+
+    textbox.bind("<Double-1>", toggle_variable_by_click)  # Restore our double-click toggle
+    textbox.bind("<ButtonRelease-1>", lambda e: "break")  # Ignore default selection effect
+
+    e_legend_frame = tk.Frame(control_frame)
+    e_legend_frame.pack(pady=10, padx=5, anchor='w')
+
+    legend_items = [
+        ("✅", "Within Typical Range", "green"),
+        ("⚠️", "Outside Typical Range", "orange"),
+        ("❌", "Outside Absolute Range", "red"),
+        ("❓", "Unclassified Restrictions", "gray")
+    ]
+
+    for symbol, label, color in legend_items:
+        row = tk.Frame(e_legend_frame)
+        row.pack(anchor='w')
+        icon = tk.Label(row, text=symbol, fg=color, font=("Segoe UI", 10))
+        icon.pack(side="left")
+        text = tk.Label(row, text=f"= {label}", font=("Segoe UI", 9))
+        text.pack(side="left")
 
 
 if __name__ == "__main__":
@@ -154,3 +300,5 @@ if __name__ == "__main__":
         tk.Label(root, text="Usage: provide a .data filepath as CLI arg").pack()
 
     root.mainloop()
+
+# Written by Elijah Schoneweis - 6/11/2025
