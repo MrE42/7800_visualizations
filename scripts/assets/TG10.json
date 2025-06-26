@@ -1,0 +1,101 @@
+{
+  "CH4 (ppb)": {
+    "typical": [
+      1800.0,
+      3000.0
+    ],
+    "absolute": [
+      0.0,
+      100000.0
+    ],
+    "autoplot": false
+  },
+  "CO2 (ppm)": {
+    "typical": [
+      0.0,
+      40.0
+    ],
+    "absolute": [
+      0.0,
+      100.0
+    ],
+    "autoplot": true
+  },
+  "H2O (ppm)": {
+    "typical": [
+      0.0,
+      35000.0
+    ],
+    "absolute": [
+      0.0,
+      60000.0
+    ],
+    "autoplot": true
+  },
+  "LASER_PHASE_P (kPa)": {
+    "typical": [
+      37.0,
+      57.0
+    ],
+    "absolute": [
+      25.0,
+      57.0
+    ],
+    "autoplot": false
+  },
+  "LASER_T (\u00b0C)": {
+    "typical": [
+      27.0,
+      60.0
+    ],
+    "absolute": [
+      25.0,
+      76.0
+    ],
+    "autoplot": false
+  },
+  "CAVITY_T (\u00b0C)": {
+    "typical": [
+      52.0,
+      56.0
+    ],
+    "absolute": [
+      0.0,
+      60.0
+    ],
+    "autoplot": false
+  },
+  "THERMAL_ENCLOSURE_T (\u00b0C)": {
+    "typical": [
+      52.0,
+      56.0
+    ],
+    "absolute": [
+      0.0,
+      80.0
+    ],
+    "autoplot": false
+  },
+  "RING_DOWN_TIME (\u00b5secs)": {
+    "typical": [
+      10.0,
+      15.0
+    ],
+    "absolute": [
+      0.0,
+      20.0
+    ],
+    "autoplot": false
+  },
+  "PHASE_ERROR (counts)": {
+    "typical": [
+      14000.0,
+      18000.0
+    ],
+    "absolute": [
+      10000.0,
+      22000.0
+    ],
+    "autoplot": false
+  }
+}
