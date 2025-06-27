@@ -4,11 +4,13 @@ import pandas as pd
 import numpy as np
 import tkinter as tk
 from unicodedata import normalize
-
-
 import os
 import json
 from file_parsing import load_and_merge_files, resource_path
+from datetime import datetime
+import pytz
+from matplotlib.ticker import FixedLocator, ScalarFormatter
+
 
 def embed_plot_7800_data(parent_frame, filepaths):
     df, model, metadata = load_and_merge_files(filepaths)
@@ -73,7 +75,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
     print("Available DataFrame columns:", list(df.columns))
     print(model)
     serial = metadata.get("SN", "Unknown SN")
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
     fig.suptitle(f"LI-78{model[2]}{model[3]}: {serial}", fontsize=14)
     lines = {}
     colors = {}
@@ -111,13 +113,14 @@ def embed_plot_7800_data(parent_frame, filepaths):
             if isinstance(widget, tk.Button) and widget['command'] == toolbar.configure_subplots:
                 widget.destroy()
 
-    # Hide Outliers Toggle
+    # Toggles
     hide_outliers_var = tk.BooleanVar(value=True)
+    use_human_time = tk.BooleanVar(value=False)
 
     def open_plot_options():
         options_win = tk.Toplevel(parent_frame)
         options_win.title("Plot Options")
-        options_win.geometry("250x150")
+        options_win.geometry("250x200")
         options_win.iconbitmap(resource_path("assets/icon.ico"))
 
 
@@ -130,6 +133,12 @@ def embed_plot_7800_data(parent_frame, filepaths):
             options_win,
             text="Hide Outliers from Zoom",
             variable=hide_outliers_var
+        ).pack(pady=5)
+
+        tk.Checkbutton(
+            options_win,
+            text="Show Human-Readable Time",
+            variable=use_human_time
         ).pack(pady=5)
 
         def apply():
@@ -246,6 +255,19 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
             if filtered.empty:
                 continue
+
+            if use_human_time.get():
+                ticks = ax.get_xticks()
+                tz = pytz.timezone(metadata.get("Timezone", "UTC"))
+                fmt_ticks = [datetime.fromtimestamp(t, tz).strftime("%Y-%m-%d %H:%M:%S") for t in ticks]
+
+                ax.xaxis.set_major_locator(FixedLocator(ticks))  # Lock the locations
+                ax.set_xticklabels(fmt_ticks, rotation=45, fontsize=8)
+            else:
+                ax.xaxis.set_major_locator(plt.AutoLocator())
+                ax.xaxis.set_major_locator(plt.AutoLocator())
+                ax.xaxis.set_major_formatter(ScalarFormatter())
+                ax.ticklabel_format(style='sci', axis='x', scilimits=(9, 9))  # keep sci formatting for large values
 
             ymins.append(filtered.min())
             ymaxs.append(filtered.max())
