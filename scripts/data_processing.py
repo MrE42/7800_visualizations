@@ -1,3 +1,5 @@
+from tkinter import messagebox
+
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import pandas as pd
@@ -9,8 +11,8 @@ import json
 from file_parsing import load_and_merge_files, resource_path
 from datetime import datetime
 import pytz
-from matplotlib.ticker import FixedLocator, ScalarFormatter
-
+from matplotlib.ticker import FixedLocator, ScalarFormatter, FuncFormatter
+from manipulation import *
 
 def embed_plot_7800_data(parent_frame, filepaths):
     df, model, metadata = load_and_merge_files(filepaths)
@@ -80,15 +82,26 @@ def embed_plot_7800_data(parent_frame, filepaths):
     lines = {}
     colors = {}
 
+    break_on_gaps_enabled = True  # default, updated by Plot Options
+
+    # Example time_col assignment from earlier:
+    time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
+    x = df[time_col]
+
     for col in df.columns:
         if col == time_col:
             continue
         y = df[col]
 
+        if break_on_gaps_enabled:
+            x_plot, y_plot = insert_nan_gaps(x, y, threshold=2.0)
+        else:
+            x_plot, y_plot = x, y
+
         config = variable_config.get(col, {})
         should_plot = config.get("autoplot", False)
 
-        line, = ax.plot(x, y, label=col, linewidth=1.5, visible=should_plot)
+        line, = ax.plot(x_plot, y_plot, label=col, linewidth=1.5, visible=should_plot)
         lines[col] = line
         colors[col] = line.get_color()
 
@@ -114,26 +127,38 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 widget.destroy()
 
     # Toggles
-    hide_outliers_var = tk.BooleanVar(value=True)
-    use_human_time = tk.BooleanVar(value=False)
+    hide_outliers_var = tk.BooleanVar(value=False)
+    use_human_time = tk.BooleanVar(value=True)
+    gap_toggle_var = tk.BooleanVar(value=True)
+    gap_threshold = tk.DoubleVar(value=2.0)
 
     def open_plot_options():
         options_win = tk.Toplevel(parent_frame)
         options_win.title("Plot Options")
-        options_win.geometry("250x200")
+        options_win.geometry("280x280")
         options_win.iconbitmap(resource_path("assets/icon.ico"))
 
-
-        tk.Label(options_win, text="Line Thickness:").pack(pady=5)
+        # Line thickness
+        tk.Label(options_win, text="Line Thickness:").pack(pady=(5, 0))
         slider = tk.Scale(options_win, from_=0.5, to=5.0, resolution=0.1, orient='horizontal')
         slider.set(1.5)
-        slider.pack(pady=0, padx=10)
+        slider.pack(pady=5, padx=10)
 
+        # Hide outliers checkbox
         tk.Checkbutton(
             options_win,
             text="Hide Outliers from Zoom",
             variable=hide_outliers_var
         ).pack(pady=5)
+
+        gap_checkbox = tk.Checkbutton(options_win, text="Break lines at gaps", variable=gap_toggle_var)
+        gap_checkbox.pack(pady=5)
+
+        # Threshold slider
+        tk.Label(options_win, text="Gap Threshold (seconds):").pack(pady=(5, 0))
+        gap_thresh_entry = tk.Entry(options_win)
+        gap_thresh_entry.insert(0, str(gap_threshold.get()))
+        gap_thresh_entry.pack(pady=5, padx=10)
 
         tk.Checkbutton(
             options_win,
@@ -142,7 +167,30 @@ def embed_plot_7800_data(parent_frame, filepaths):
         ).pack(pady=5)
 
         def apply():
+            nonlocal break_on_gaps_enabled
             lw = float(slider.get())
+            try:
+                val = float(gap_thresh_entry.get())
+                gap_threshold.set(val)
+            except ValueError:
+                messagebox.showerror("Invalid Input", "Gap threshold must be a number.")
+                return
+            if break_on_gaps_enabled != gap_toggle_var.get():
+                break_on_gaps_enabled = gap_toggle_var.get()
+                for var, line in lines.items():
+                    line.set_linewidth(lw)
+
+                    # Reload x/y data with or without gaps
+                    x = df[time_col]
+                    y = df[var]
+                    if break_on_gaps_enabled:
+                        x_plot, y_plot = insert_nan_gaps(x, y, threshold=gap_threshold.get())
+                    else:
+                        x_plot, y_plot = x, y
+
+                    line.set_xdata(x_plot)
+                    line.set_ydata(y_plot)
+
             for line in lines.values():
                 line.set_linewidth(lw)
             rescale()
@@ -257,12 +305,11 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 continue
 
             if use_human_time.get():
-                ticks = ax.get_xticks()
                 tz = pytz.timezone(metadata.get("Timezone", "UTC"))
-                fmt_ticks = [datetime.fromtimestamp(t, tz).strftime("%Y-%m-%d %H:%M:%S") for t in ticks]
-
-                ax.xaxis.set_major_locator(FixedLocator(ticks))  # Lock the locations
-                ax.set_xticklabels(fmt_ticks, rotation=45, fontsize=8)
+                ax.xaxis.set_major_formatter(FuncFormatter(
+                    lambda x, _: datetime.fromtimestamp(x, tz).strftime("%Y-%m-%d %H:%M:%S") if x > 0 else ""
+                ))
+                ax.tick_params(axis='x', rotation=45, labelsize=8)
             else:
                 ax.xaxis.set_major_locator(plt.AutoLocator())
                 ax.xaxis.set_major_locator(plt.AutoLocator())
@@ -274,8 +321,11 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         if ymins and ymaxs:
             ymin, ymax = min(ymins), max(ymaxs)
-            pad = (ymax - ymin) * 0.05
-            ax.set_ylim(ymin - pad, ymax + pad)
+            if ymin == ymax:
+                ax.set_ylim(ymin - 1, ymax + 1)  # give it a small padding
+            else:
+                pad = (ymax - ymin) * 0.05
+                ax.set_ylim(ymin - pad, ymax + pad)
 
         canvas.draw()
 
