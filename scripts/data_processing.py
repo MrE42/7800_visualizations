@@ -15,6 +15,7 @@ import pytz
 from matplotlib.ticker import FixedLocator, ScalarFormatter, FuncFormatter
 from manipulation import *
 
+
 def embed_plot_7800_data(parent_frame, filepaths):
     df, model, metadata = load_and_merge_files(filepaths)
     time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
@@ -51,7 +52,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
     print("\n🔍 Identifying startup and outlier regions...")
     spans = identify_operational_spans(df)
 
-    # update_spec_checks(ax, df, variable_config)
+    latest_stats = {}
+    stats_win_ref = None
+    stats_text_ref = None
 
     # Classify variable statuses
     validation_results = {}
@@ -196,7 +199,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                     run_threshold.set(val)
                     nonlocal spans
                     spans = identify_operational_spans(df, run_threshold.get())
-                    on_zoom()
+                on_zoom()
             except ValueError:
                 messagebox.showerror("Invalid Input", "Running end threshold must be a number.")
                 return
@@ -218,6 +221,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
             for line in lines.values():
                 line.set_linewidth(lw)
+
             rescale()
 
         tk.Button(options_win, text="Apply", command=apply).pack(pady=5)
@@ -456,17 +460,67 @@ def embed_plot_7800_data(parent_frame, filepaths):
         text = tk.Label(row, text=f"= {label}", font=("Segoe UI", 9))
         text.pack(side="left")
 
+    def update_stats_window():
+        if not stats_text_ref or not stats_text_ref.winfo_exists():
+            return
+
+        stats_text_ref.config(state='normal')
+        stats_text_ref.delete("1.0", "end")
+
+        if not latest_stats:
+            stats_text_ref.insert("end", "⚠️ No data available.\n")
+        else:
+            for var, stat in latest_stats.items():
+                stats_text_ref.insert("end", f"{var}:\n")
+                stats_text_ref.insert("end", f"  Mean: {stat['mean']:.2f}\n")
+                stats_text_ref.insert("end", f"  Min:  {stat['min']:.2f}\n")
+                stats_text_ref.insert("end", f"  Max:  {stat['max']:.2f}\n")
+                if stat["in_typical"] is not None:
+                    stats_text_ref.insert("end", f"  In Typical: {stat['in_typical']}/{stat['total']}\n")
+                if stat["in_absolute"] is not None:
+                    stats_text_ref.insert("end", f"  In Absolute: {stat['in_absolute']}/{stat['total']}\n")
+                stats_text_ref.insert("end", "\n")
+
+        stats_text_ref.config(state='disabled')
+
     def on_zoom(event_ax = None):
         nonlocal validation_results
+        nonlocal latest_stats
         print("zooming")
-        validation_results = update_spec_checks(ax, df, variable_config, [r for _, r in spans], validation_results, run_threshold.get())
+        validation_results, latest_stats = update_spec_checks(ax, df, variable_config, [r for _, r in spans], validation_results, run_threshold.get(), hide_outliers_mode.get())
         update_listbox()
+        update_stats_window()
 
     # Connect the zoom (x-axis change) event
     ax.callbacks.connect("xlim_changed", on_zoom)
 
     on_zoom()
 
+
+
+    def open_stats_window():
+        nonlocal stats_win_ref, stats_text_ref
+
+        if stats_win_ref and stats_win_ref.winfo_exists():
+            stats_win_ref.lift()
+            return
+
+        stats_win = tk.Toplevel(parent_frame)
+        stats_win.title("Statistics Window")
+        stats_win.geometry("500x600")
+        stats_win.iconbitmap(resource_path("assets/icon.ico"))
+        stats_win_ref = stats_win
+
+        tk.Label(stats_win, text="Visible & Running Segment Stats", font=("Helvetica", 12, "bold")).pack(pady=10)
+
+        stats_text = tk.Text(stats_win, wrap='none', font=("Courier New", 9))
+        stats_text.pack(fill='both', expand=True, padx=5, pady=5)
+        stats_text_ref = stats_text
+
+        update_stats_window()
+
+    stats_btn = tk.Button(toolbar, text="Statistics", command=open_stats_window)
+    stats_btn.pack(side='left')
 
 if __name__ == "__main__":
     import sys

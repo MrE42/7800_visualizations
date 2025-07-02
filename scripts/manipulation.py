@@ -90,7 +90,7 @@ def identify_operational_spans(df, threshold= 2, time_col='SECONDS (secs)', cavi
     print(f"✅ Done: {len(spans)*2} spans identified")
     return spans
 
-def update_spec_checks(ax, df, variable_config, running_spans, results = {}, threshold = 2, time_col='SECONDS (secs)'):
+def update_spec_checks(ax, df, variable_config, running_spans, results = {}, threshold = 2, mode = "None", time_col='SECONDS (secs)'):
     if time_col not in df:
         print("⚠️ DataFrame missing required time column for spec checks.")
         return results
@@ -98,19 +98,23 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
     xlim = ax.get_xlim()
     visible_mask = (df[time_col] >= xlim[0]) & (df[time_col] <= xlim[1])
 
-    # Combine all running span filters
-    running_mask = pd.Series(False, index=df.index)
-    for start, end in running_spans:
-        if (end - start) > threshold:
-            running_mask |= (df[time_col] >= start) & (df[time_col] <= end - threshold)
+    # Combine all running span filters if needed
+    if mode in ["Running", "IQR"]:
+        running_mask = pd.Series(False, index=df.index)
+        for start, end in running_spans:
+            if (end - start) > threshold:
+                running_mask |= (df[time_col] >= start) & (df[time_col] <= end - threshold)
+        combined_mask = visible_mask & running_mask
+    else:
+        combined_mask = visible_mask
 
-    combined_mask = visible_mask & running_mask
     subset = df[combined_mask]
 
     if subset.empty:
         print("⚠️ No data in view and running spans.")
         return results
 
+    stats = {}
 
     for var, config in variable_config.items():
         if var not in subset.columns:
@@ -120,11 +124,31 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
         if values.empty:
             continue
 
+        if mode == "IQR":
+            Q1 = np.percentile(values, 25)
+            Q3 = np.percentile(values, 75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            values = values[(values >= lower_bound) & (values <= upper_bound)]
+            if values.empty:
+                continue
+
+        stat = {
+            "mean": values.mean(),
+            "min": values.min(),
+            "max": values.max(),
+            "total": len(values),
+            "in_typical": None,
+            "in_absolute": None
+        }
+
         status = "undefined"
+
         if "typical" in config:
             low, high = config["typical"]
             out_typical = (values < low) | (values > high)
-            print(f"{var}: {out_typical.sum()} / {len(values)} outside typical range")
+            stat["in_typical"] = len(values) - out_typical.sum()
             if out_typical.any():
                 status = "outside typical"
             else:
@@ -133,11 +157,13 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
         if "absolute" in config:
             low, high = config["absolute"]
             out_abs = (values < low) | (values > high)
-            print(f"{var}: {out_abs.sum()} / {len(values)} outside absolute range")
+            stat["in_absolute"] = len(values) - out_abs.sum()
             if out_abs.any():
                 status = "outside absolute"
             elif status not in ["within typical"]:
                 status = "outside typical"
 
         results[var] = status
-    return results
+        stats[var] = stat
+
+    return results, stats
