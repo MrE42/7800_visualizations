@@ -9,15 +9,19 @@ import tkinter as tk
 from unicodedata import normalize
 import os
 import json
-from file_parsing import load_and_merge_files, resource_path
 from datetime import datetime
 import pytz
 from matplotlib.ticker import FixedLocator, ScalarFormatter, FuncFormatter
+
 from manipulation import *
+from file_parsing import *
 
 
 def embed_plot_7800_data(parent_frame, filepaths):
     df, model, metadata = load_and_merge_files(filepaths)
+
+    df = clean_error_codes(df)
+
     time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
     x = df[time_col]
 
@@ -507,7 +511,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         stats_win = tk.Toplevel(parent_frame)
         stats_win.title("Statistics Window")
-        stats_win.geometry("500x600")
+        stats_win.geometry("280x600")
         stats_win.iconbitmap(resource_path("assets/icon.ico"))
         stats_win_ref = stats_win
 

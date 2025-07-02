@@ -1,7 +1,9 @@
 import re
 import os
 import pandas as pd
+import numpy as np
 import sys
+import json
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -87,6 +89,23 @@ def load_and_merge_files(filepaths):
 
     return merged_df, model_number, base_metadata
 
+def clean_error_codes(df):
+    path = resource_path(os.path.join("assets", "error_codes.json"))
+    try:
+        with open(path, 'r') as f:
+            error_codes = json.load(f)
+    except Exception as e:
+        print(f"⚠️ Failed to load error_codes.json: {e}")
+        return df
+
+    if not isinstance(error_codes, list):
+        print("⚠️ error_codes.json must be a list of values.")
+        return df
+
+    for col in df.select_dtypes(include=["float", "int"]).columns:
+        df[col] = df[col].apply(lambda x: np.nan if x in error_codes else x)
+
+    return df
 
 # Written by Elijah Schoneweis - 6/11/2025
 #fig.suptitle(f"LI-78{model[2]}{model[3]} Data Visualization", fontsize=14)
