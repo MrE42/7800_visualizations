@@ -1,5 +1,6 @@
 from tkinter import messagebox
-
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import pandas as pd
@@ -47,7 +48,10 @@ def embed_plot_7800_data(parent_frame, filepaths):
     else:
         print("<UNK> Config file not found.")
 
+    print("\n🔍 Identifying startup and outlier regions...")
+    spans = identify_operational_spans(df)
 
+    # update_spec_checks(ax, df, variable_config)
 
     # Classify variable statuses
     validation_results = {}
@@ -83,14 +87,12 @@ def embed_plot_7800_data(parent_frame, filepaths):
     colors = {}
 
     break_on_gaps_enabled = True  # default, updated by Plot Options
-
     # Example time_col assignment from earlier:
     time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
     x = df[time_col]
-
-    for col in df.columns:
-        if col == time_col:
-            continue
+    plottable_columns = [col for col in df.columns if col != time_col and col not in ['NANOSECONDS (nsecs)', 'DATE (date)', 'TIME (time)']]
+    colormap = cm.get_cmap('berlin', len(plottable_columns))
+    for i, col in enumerate(plottable_columns):
         y = df[col]
 
         if break_on_gaps_enabled:
@@ -100,10 +102,10 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         config = variable_config.get(col, {})
         should_plot = config.get("autoplot", False)
-
-        line, = ax.plot(x_plot, y_plot, label=col, linewidth=1.5, visible=should_plot)
+        color = mcolors.to_hex(colormap(i))
+        line, = ax.plot(x_plot, y_plot, label=col, linewidth=1.5, visible=should_plot, color=color)
         lines[col] = line
-        colors[col] = line.get_color()
+        colors[col] = color
 
 
     ax.set_xlabel(time_col)
@@ -127,15 +129,17 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 widget.destroy()
 
     # Toggles
-    hide_outliers_var = tk.BooleanVar(value=False)
+    hide_outliers_mode = tk.StringVar(value="IQR")  # Options: None, IQR, Running
     use_human_time = tk.BooleanVar(value=True)
     gap_toggle_var = tk.BooleanVar(value=True)
-    gap_threshold = tk.DoubleVar(value=2.0)
+    gap_threshold = tk.IntVar(value=2)
+    draw_spans_var = tk.BooleanVar(value=True)
+    run_threshold = tk.IntVar(value=2)
 
     def open_plot_options():
         options_win = tk.Toplevel(parent_frame)
         options_win.title("Plot Options")
-        options_win.geometry("280x280")
+        options_win.geometry("280x400")
         options_win.iconbitmap(resource_path("assets/icon.ico"))
 
         # Line thickness
@@ -144,18 +148,18 @@ def embed_plot_7800_data(parent_frame, filepaths):
         slider.set(1.5)
         slider.pack(pady=5, padx=10)
 
-        # Hide outliers checkbox
-        tk.Checkbutton(
-            options_win,
-            text="Hide Outliers from Zoom",
-            variable=hide_outliers_var
-        ).pack(pady=5)
+        # Hide outliers menu
+        tk.Label(options_win, text="Outlier Handling:").pack(pady=(5, 0))
+        outlier_dropdown = tk.OptionMenu(
+            options_win, hide_outliers_mode, "None", "IQR", "Running"
+        )
+        outlier_dropdown.pack(pady=5)
 
         gap_checkbox = tk.Checkbutton(options_win, text="Break lines at gaps", variable=gap_toggle_var)
         gap_checkbox.pack(pady=5)
 
         # Threshold slider
-        tk.Label(options_win, text="Gap Threshold (seconds):").pack(pady=(5, 0))
+        tk.Label(options_win, text="Data Gap Threshold (seconds):").pack(pady=(5, 0))
         gap_thresh_entry = tk.Entry(options_win)
         gap_thresh_entry.insert(0, str(gap_threshold.get()))
         gap_thresh_entry.pack(pady=5, padx=10)
@@ -166,6 +170,17 @@ def embed_plot_7800_data(parent_frame, filepaths):
             variable=use_human_time
         ).pack(pady=5)
 
+        tk.Checkbutton(
+            options_win,
+            text="Draw Startup/Running Spans",
+            variable=draw_spans_var
+        ).pack(pady=5)
+
+        tk.Label(options_win, text="Running Span Threshold (seconds):").pack(pady=(5, 0))
+        run_thresh_entry = tk.Entry(options_win)
+        run_thresh_entry.insert(0, str(gap_threshold.get()))
+        run_thresh_entry.pack(pady=5, padx=10)
+
         def apply():
             nonlocal break_on_gaps_enabled
             lw = float(slider.get())
@@ -174,6 +189,16 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 gap_threshold.set(val)
             except ValueError:
                 messagebox.showerror("Invalid Input", "Gap threshold must be a number.")
+                return
+            try:
+                val = float(run_thresh_entry.get())
+                if val != run_threshold.get():
+                    run_threshold.set(val)
+                    nonlocal spans
+                    spans = identify_operational_spans(df, run_threshold.get())
+                    on_zoom()
+            except ValueError:
+                messagebox.showerror("Invalid Input", "Running end threshold must be a number.")
                 return
             if break_on_gaps_enabled != gap_toggle_var.get():
                 break_on_gaps_enabled = gap_toggle_var.get()
@@ -224,6 +249,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
     )  # make it read-only after inserting
 
     variable_names = list(lines.keys())
+
+
 
     # Updating the variable list
     def update_listbox(*args):
@@ -283,49 +310,86 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     update_listbox()
     update_legend()
-
+    spans_drawn = False
     def rescale():
+        nonlocal spans_drawn
+        nonlocal spans
+
+        mode = hide_outliers_mode.get()
         ymins, ymaxs = [], []
+
+        xlim = ax.get_xlim()
+        visible_mask = (df[time_col] >= xlim[0]) & (df[time_col] <= xlim[1])
+
+        if mode == "Running" or mode == "IQR":
+            # Combine all running span filters
+            running_mask = pd.Series(False, index=df.index)
+            for startup, running in spans:
+                r_start, r_end = running
+                running_mask |= (df[time_col] >= r_start) & (df[time_col] <= r_end - run_threshold.get())
+            combined_mask = visible_mask & running_mask
+        else:
+            combined_mask = visible_mask
 
         for var, line in lines.items():
             if not line.get_visible():
                 continue
 
-            y_data = df[var]
-            conf = variable_config.get(var, {})
+            y_data = df[var][combined_mask].dropna()
 
-            # For y-limits only, apply filtering if 'Hide Outliers' is active
-            if hide_outliers_var.get() and "typical" in conf:
-                low, high = conf["typical"]
-                filtered = y_data[(y_data >= low) & (y_data <= high)]
-            else:
-                filtered = y_data[np.isfinite(y_data)]
-
-            if filtered.empty:
+            if y_data.empty:
                 continue
 
-            if use_human_time.get():
-                tz = pytz.timezone(metadata.get("Timezone", "UTC"))
-                ax.xaxis.set_major_formatter(FuncFormatter(
-                    lambda x, _: datetime.fromtimestamp(x, tz).strftime("%Y-%m-%d %H:%M:%S") if x > 0 else ""
-                ))
-                ax.tick_params(axis='x', rotation=45, labelsize=8)
-            else:
-                ax.xaxis.set_major_locator(plt.AutoLocator())
-                ax.xaxis.set_major_locator(plt.AutoLocator())
-                ax.xaxis.set_major_formatter(ScalarFormatter())
-                ax.ticklabel_format(style='sci', axis='x', scilimits=(9, 9))  # keep sci formatting for large values
+            # Hide outliers using IQR method
+            if mode == "IQR":
+                Q1 = np.percentile(y_data, 25)
+                Q3 = np.percentile(y_data, 75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - 1.5 * IQR
+                upper_bound = Q3 + 1.5 * IQR
+                y_data = y_data[(y_data >= lower_bound) & (y_data <= upper_bound)]
 
-            ymins.append(filtered.min())
-            ymaxs.append(filtered.max())
+
+            if y_data.empty:
+                continue
+
+            ymins.append(y_data.min())
+            ymaxs.append(y_data.max())
 
         if ymins and ymaxs:
             ymin, ymax = min(ymins), max(ymaxs)
             if ymin == ymax:
-                ax.set_ylim(ymin - 1, ymax + 1)  # give it a small padding
+                ax.set_ylim(ymin - 1, ymax + 1)
             else:
                 pad = (ymax - ymin) * 0.05
                 ax.set_ylim(ymin - pad, ymax + pad)
+
+        # Remove old spans first
+        if not draw_spans_var.get() and spans_drawn:
+            spans_drawn = False
+            for patch in ax.patches[:]:
+                if getattr(patch, "_span", False):
+                    patch.remove()
+
+        # Draw new spans only if toggled on
+        if draw_spans_var.get() and not spans_drawn:
+            spans_drawn = True
+            for (startup_start, startup_end), (running_start, running_end) in spans:
+                start = ax.axvspan(startup_start, startup_end, color='blue', alpha=0.2, label='Starting')
+                run = ax.axvspan(running_start, running_end, color='green', alpha=0.1, label='Running')
+                start._span = True
+                run._span = True
+
+        if use_human_time.get():
+            tz = pytz.timezone(metadata.get("Timezone", "UTC"))
+            ax.xaxis.set_major_formatter(FuncFormatter(
+                lambda x, _: datetime.fromtimestamp(x, tz).strftime("%Y-%m-%d %H:%M:%S") if x > 0 else ""
+            ))
+            ax.tick_params(axis='x', rotation=45, labelsize=8)
+        else:
+            ax.xaxis.set_major_locator(plt.AutoLocator())
+            ax.xaxis.set_major_formatter(ScalarFormatter())
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(9, 9))  # keep sci formatting for large values
 
         canvas.draw()
 
@@ -391,6 +455,17 @@ def embed_plot_7800_data(parent_frame, filepaths):
         icon.pack(side="left")
         text = tk.Label(row, text=f"= {label}", font=("Segoe UI", 9))
         text.pack(side="left")
+
+    def on_zoom(event_ax = None):
+        nonlocal validation_results
+        print("zooming")
+        validation_results = update_spec_checks(ax, df, variable_config, [r for _, r in spans], validation_results, run_threshold.get())
+        update_listbox()
+
+    # Connect the zoom (x-axis change) event
+    ax.callbacks.connect("xlim_changed", on_zoom)
+
+    on_zoom()
 
 
 if __name__ == "__main__":
