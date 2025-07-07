@@ -185,7 +185,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         tk.Label(options_win, text="Running Span Threshold (seconds):").pack(pady=(5, 0))
         run_thresh_entry = tk.Entry(options_win)
-        run_thresh_entry.insert(0, str(gap_threshold.get()))
+        run_thresh_entry.insert(0, str(run_threshold.get()))
         run_thresh_entry.pack(pady=5, padx=10)
 
         def apply():
@@ -198,9 +198,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 messagebox.showerror("Invalid Input", "Gap threshold must be a number.")
                 return
             try:
-                val = float(run_thresh_entry.get())
-                if val != run_threshold.get():
-                    run_threshold.set(val)
+                v = float(run_thresh_entry.get())
+                if v != run_threshold.get():
+                    run_threshold.set(v)
                     nonlocal spans
                     spans = identify_operational_spans(df, run_threshold.get())
                 on_zoom()
