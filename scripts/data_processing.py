@@ -142,6 +142,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
     gap_threshold = tk.IntVar(value=2)
     draw_spans_var = tk.BooleanVar(value=True)
     run_threshold = tk.IntVar(value=2)
+    spans_changed = False
 
     def open_plot_options():
         options_win = tk.Toplevel(parent_frame)
@@ -190,6 +191,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         def apply():
             nonlocal break_on_gaps_enabled
+            nonlocal spans
+            nonlocal df
+            nonlocal spans_changed
             lw = float(slider.get())
             try:
                 val = float(gap_thresh_entry.get())
@@ -201,8 +205,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 v = float(run_thresh_entry.get())
                 if v != run_threshold.get():
                     run_threshold.set(v)
-                    nonlocal spans
                     spans = identify_operational_spans(df, run_threshold.get())
+                    print("Made it here")
+                    spans_changed = True
                 on_zoom()
             except ValueError:
                 messagebox.showerror("Invalid Input", "Running end threshold must be a number.")
@@ -322,6 +327,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
     def rescale():
         nonlocal spans_drawn
         nonlocal spans
+        nonlocal spans_changed
 
         mode = hide_outliers_mode.get()
         ymins, ymaxs = [], []
@@ -334,7 +340,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
             running_mask = pd.Series(False, index=df.index)
             for startup, running in spans:
                 r_start, r_end = running
-                running_mask |= (df[time_col] >= r_start) & (df[time_col] <= r_end - run_threshold.get())
+                adjusted_end = r_end - run_threshold.get()
+                if adjusted_end > r_start:
+                    running_mask |= (df[time_col] >= r_start) & (df[time_col] <= adjusted_end)
             combined_mask = visible_mask & running_mask
         else:
             combined_mask = visible_mask
@@ -371,17 +379,22 @@ def embed_plot_7800_data(parent_frame, filepaths):
             else:
                 pad = (ymax - ymin) * 0.05
                 ax.set_ylim(ymin - pad, ymax + pad)
+        else:
+            print("⚠️ No data for rescaling. Skipping set_ylim.")
 
         # Remove old spans first
-        if not draw_spans_var.get() and spans_drawn:
+        if (not draw_spans_var.get() and spans_drawn) or spans_changed:
             spans_drawn = False
+            print("spans erased")
             for patch in ax.patches[:]:
                 if getattr(patch, "_span", False):
                     patch.remove()
 
         # Draw new spans only if toggled on
-        if draw_spans_var.get() and not spans_drawn:
+        if (draw_spans_var.get() and not spans_drawn) or spans_changed:
             spans_drawn = True
+            spans_changed = False
+            print("spans drawn")
             for (startup_start, startup_end), (running_start, running_end) in spans:
                 start = ax.axvspan(startup_start, startup_end, color='blue', alpha=0.2, label='Starting')
                 run = ax.axvspan(running_start, running_end, color='green', alpha=0.1, label='Running')

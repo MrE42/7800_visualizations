@@ -93,7 +93,7 @@ def identify_operational_spans(df, threshold= 2, time_col='SECONDS (secs)', cavi
 def update_spec_checks(ax, df, variable_config, running_spans, results = {}, threshold = 2, mode = "None", time_col='SECONDS (secs)'):
     if time_col not in df:
         print("⚠️ DataFrame missing required time column for spec checks.")
-        return results
+        return results, {}
 
     xlim = ax.get_xlim()
     visible_mask = (df[time_col] >= xlim[0]) & (df[time_col] <= xlim[1])
@@ -102,8 +102,10 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
     if mode in ["Running", "IQR"]:
         running_mask = pd.Series(False, index=df.index)
         for start, end in running_spans:
-            if (end - start) > threshold:
-                running_mask |= (df[time_col] >= start) & (df[time_col] <= end - threshold)
+            adjusted_end = end - threshold
+            if adjusted_end > start:
+                running_mask |= (df[time_col] >= start) & (df[time_col] <= adjusted_end)
+
         combined_mask = visible_mask & running_mask
     else:
         combined_mask = visible_mask
@@ -112,7 +114,7 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
 
     if subset.empty:
         print("⚠️ No data in view and running spans.")
-        return results
+        return results, {}
 
     stats = {}
 

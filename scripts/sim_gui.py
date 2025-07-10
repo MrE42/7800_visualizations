@@ -73,6 +73,14 @@ class App:
 
 if __name__ == "__main__":
     root = tk.Tk()
+
+
+    def on_closing():
+        root.destroy()
+        sys.exit()
+
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     app = App(root)
     root.mainloop()
 
