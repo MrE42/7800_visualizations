@@ -1,14 +1,14 @@
 {
-  "CH4 (ppb)": {
+  "H2O (ppm)": {
     "typical": [
-      1800.0,
-      3000.0
+      0.0,
+      35000.0
     ],
     "absolute": [
       0.0,
-      100000.0
+      60000.0
     ],
-    "autoplot": false
+    "autoplot": true
   },
   "CO2 (ppm)": {
     "typical": [
@@ -21,16 +21,27 @@
     ],
     "autoplot": true
   },
-  "H2O (ppm)": {
+  "CH4 (ppb)": {
     "typical": [
-      0.0,
-      35000.0
+      1800.0,
+      3000.0
     ],
     "absolute": [
       0.0,
-      60000.0
+      100000.0
     ],
-    "autoplot": true
+    "autoplot": false
+  },
+  "CAVITY_T (\u00b0C)": {
+    "typical": [
+      52.0,
+      56.0
+    ],
+    "absolute": [
+      0.0,
+      60.0
+    ],
+    "autoplot": false
   },
   "LASER_PHASE_P (kPa)": {
     "typical": [
@@ -54,14 +65,14 @@
     ],
     "autoplot": false
   },
-  "CAVITY_T (\u00b0C)": {
+  "RING_DOWN_TIME (\u00b5secs)": {
     "typical": [
-      52.0,
-      56.0
+      10.0,
+      15.0
     ],
     "absolute": [
       0.0,
-      60.0
+      20.0
     ],
     "autoplot": false
   },
@@ -73,17 +84,6 @@
     "absolute": [
       0.0,
       80.0
-    ],
-    "autoplot": false
-  },
-  "RING_DOWN_TIME (\u00b5secs)": {
-    "typical": [
-      10.0,
-      15.0
-    ],
-    "absolute": [
-      0.0,
-      20.0
     ],
     "autoplot": false
   },

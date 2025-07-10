@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 import pytz
 from matplotlib.ticker import FixedLocator, ScalarFormatter, FuncFormatter
-
+from tkinter import ttk, messagebox
 from manipulation import *
 from file_parsing import *
 
@@ -267,7 +267,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         textbox.delete("1.0", "end")
 
         for var in variable_names:
-            if search_term not in var.lower():
+            if search_term not in var.lower() and search_term not in [""]:
                 continue
 
             visible = lines[var].get_visible()
@@ -490,6 +490,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
     def on_zoom(event_ax = None):
         nonlocal validation_results
         nonlocal latest_stats
+        nonlocal variable_config
         print("zooming")
         validation_results, latest_stats = update_spec_checks(ax, df, variable_config, [r for _, r in spans], validation_results, run_threshold.get(), hide_outliers_mode.get())
         update_listbox()
@@ -525,6 +526,140 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     stats_btn = tk.Button(toolbar, text="Statistics", command=open_stats_window)
     stats_btn.pack(side='left')
+
+
+    def edit_variable_config(parent, model_id, available_columns):
+        nonlocal variable_config
+        window = tk.Toplevel(parent)
+        window.title("Configure Variables")
+        window.geometry("1000x600")
+        window.iconbitmap(resource_path("assets/icon.ico"))
+
+        config_frame = tk.Frame(window)
+        config_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+        columns = ("name", "typ_min", "typ_max", "abs_min", "abs_max", "autoplot")
+        tree = ttk.Treeview(config_frame, columns=columns, show='headings')
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, anchor="center", width=130)
+        tree.pack(fill='both', expand=True)
+
+        scrollbar = ttk.Scrollbar(config_frame, orient="vertical", command=tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        def refresh_tree():
+            tree.delete(*tree.get_children())
+            for var, settings in variable_config.items():
+                typ = settings.get("typical", ["", ""])
+                abs_ = settings.get("absolute", ["", ""])
+                autoplot = settings.get("autoplot", False)
+                tree.insert("", "end", iid=var, values=(var, typ[0], typ[1], abs_[0], abs_[1], autoplot))
+
+        def update_selected():
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("No Selection", "Select a variable to update.")
+                return
+            for var in selected:
+                values = tree.item(var, "values")
+                try:
+                    variable_config[var]["typical"] = [float(values[1]), float(values[2])]
+                    variable_config[var]["absolute"] = [float(values[3]), float(values[4])]
+                    variable_config[var]["autoplot"] = values[5] in ("True", "true", "1")
+                except Exception as e:
+                    messagebox.showerror("Update Error", f"{var}: {e}")
+            messagebox.showinfo("Updated", "Configuration updated.")
+            try:
+                on_zoom()
+            except Exception as e:
+                messagebox.showerror("Config Update Error", f"{e}")
+
+        def remove_selected():
+            nonlocal validation_results
+            selected = tree.selection()
+            for var in selected:
+                variable_config.pop(var, None)
+                validation_results[var] = "unclassified"
+            refresh_tree()
+            on_zoom()
+
+        def add_variable():
+            available = [col for col in available_columns if col not in variable_config]
+            if not available:
+                messagebox.showinfo("No Available Variables", "All variables are already configured.")
+                return
+
+            top = tk.Toplevel(window)
+            top.title("Add Variable")
+
+            tk.Label(top, text="Select Variable:").pack(pady=5)
+            var_choice = ttk.Combobox(top, values=available, state='readonly')
+            var_choice.pack(pady=5)
+
+            def confirm_add():
+                var = var_choice.get()
+                if var:
+                    variable_config[var] = {
+                        "typical": [0.0, 1.0],
+                        "absolute": [0.0, 1.0],
+                        "autoplot": False
+                    }
+                    refresh_tree()
+                    top.destroy()
+
+            ttk.Button(top, text="Add", command=confirm_add).pack(pady=10)
+
+        def save_changes():
+            try:
+                config_path = resource_path(f"assets/{model_id}.json")
+                with open(config_path, "w", encoding='utf-8') as f:
+                    json.dump(variable_config, f, indent=2, ensure_ascii=True)
+                messagebox.showinfo("Saved", f"Saved to {model_id}.json")
+            except Exception as e:
+                messagebox.showerror("Save Error", str(e))
+
+        def on_double_click(event):
+            region = tree.identify("region", event.x, event.y)
+            if region != "cell":
+                return
+            col = tree.identify_column(event.x)
+            row = tree.identify_row(event.y)
+            if not row or col == "#1":  # Don't allow editing 'name'
+                return
+
+            col_idx = int(col[1:]) - 1
+            x, y, w, h = tree.bbox(row, col)
+            entry = tk.Entry(tree)
+            entry.place(x=x, y=y, width=w, height=h)
+            entry.insert(0, tree.item(row)["values"][col_idx])
+
+            def save_edit(event=None):
+                new_value = entry.get()
+                values = list(tree.item(row)["values"])
+                values[col_idx] = new_value
+                tree.item(row, values=values)
+                entry.destroy()
+
+            entry.bind("<Return>", save_edit)
+            entry.bind("<FocusOut>", lambda e: entry.destroy())
+
+            entry.focus()
+
+        tree.bind("<Double-1>", on_double_click)
+
+        btn_frame = tk.Frame(window)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="Update", command=update_selected).grid(row=0, column=0, padx=5)
+        ttk.Button(btn_frame, text="Remove", command=remove_selected).grid(row=0, column=1, padx=5)
+        ttk.Button(btn_frame, text="Add Variable", command=add_variable).grid(row=0, column=2, padx=5)
+        ttk.Button(btn_frame, text="Save", command=save_changes).grid(row=0, column=3, padx=5)
+
+        refresh_tree()
+
+    tk.Button(toolbar, text="Configure Variables", command=lambda: edit_variable_config(
+        parent_frame, model, df.columns.tolist())).pack(side='left')
 
 if __name__ == "__main__":
     import sys

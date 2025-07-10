@@ -167,3 +167,4 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
         stats[var] = stat
 
     return results, stats
+
