@@ -229,12 +229,12 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
 
 
-    tk.Label(control_frame, text="Search Variable:", font=("Helvetica", 10, "bold")).pack(pady=(5, 2))
+    tk.Label(control_frame, text="Search Variable:", font=("Helvetica", 12, "bold")).pack(pady=(5, 2))
     search_var = tk.StringVar()
     search_entry = tk.Entry(control_frame, textvariable=search_var, width=30)
     search_entry.pack(padx=5, pady=(0, 5), fill='x')
 
-    textbox = tk.Text(control_frame, height=20, width=40)
+    textbox = tk.Text(control_frame, height=20, width=40, font=("Helvetica", 12, "normal"))
     textbox.pack(padx=5, pady=5, fill='y', expand=True)
     textbox.config(
         state='disabled',
@@ -270,7 +270,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 "unclassified": ("❓", "gray")
             }.get(status, ("❓", "gray"))
 
-            line_text = f"{checkmark} {icon} {var}\n"
+            line_text = f"{checkmark} {icon} {re.match(r"^[^(]*", var).group()}\n"
             start_idx = textbox.index("end-1c")
             end_idx = f"{start_idx}+{len(line_text)}c"
             textbox.insert("end", line_text)
@@ -505,13 +505,13 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         stats_win = tk.Toplevel(parent_frame)
         stats_win.title("Statistics Window")
-        stats_win.geometry("280x600")
+        stats_win.geometry("360x600")
 
         stats_win_ref = stats_win
 
-        tk.Label(stats_win, text="Visible & Running Segment Stats", font=("Helvetica", 12, "bold")).pack(pady=10)
+        tk.Label(stats_win, text="Visible & Running Segment Stats", font=("Helvetica", 15, "bold")).pack(pady=10)
 
-        stats_text = tk.Text(stats_win, wrap='none', font=("Courier New", 9))
+        stats_text = tk.Text(stats_win, wrap='none', font=("Courier New", 12))
         stats_text.pack(fill='both', expand=True, padx=5, pady=5)
         stats_text_ref = stats_text
 
