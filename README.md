@@ -14,23 +14,6 @@
 - 🎛 **Config editor** for per-variable threshold editing and autoplots
 - 🧱 **Error value masking** via customizable JSON
 - 🧪 **Supports multiple model types** (TG10, etc.)
-- 🧰 Built-in file browser and smooth matplotlib + Tkinter integration
-
----
-
-## 📂 File Structure
-
-```
-├── assets/
-│   ├── icon.ico
-│   ├── logo.png
-│   └── [model].json          # e.g., TG10.json for variable specs
-├── scripts/
-│   ├── data_processing.py    # Plotting logic
-│   ├── manipulation.py       # Span detection, spec stats, filtering
-│   ├── file_parsing.py       # File loading, JSON resource path
-│   └── sim_gui.py            # Tkinter main app
-```
 
 ---
 
@@ -38,13 +21,11 @@
 
 ### 🖥 Running Locally
 
-You can run the program using:
+Packaged executables (`.exe` & `.app`) are supplied in Releases. You can also run the program using:
 
 ```bash
 python scripts/sim_gui.py
 ```
-
-Alternatively, a packaged `.exe` or Mac `.app` is supplied in releases.
 
 ### 📈 Opening Data
 
@@ -83,9 +64,8 @@ When modifying a variable in the config, make sure to **Update** the variable to
 
 Span detection identifies:
 
-- **Startup** = NDX present but not yet thermally stable (T ≥ 55°C/54°C)
-- **Running** = After startup, until NDX goes inactive or there's a >10s gap
-- **Off** = All other periods
+- 🟦 **Startup** = NDX present but not yet thermally stable (T ≥ 55°C/54°C)
+- 🟩 **Running** = Once thermally stable, and until the device stops indexing.
 
 ## ⭕ Outlier Handling
 
@@ -94,6 +74,8 @@ Valid outliers are used to determine the initial frame of data, and the validati
 - **Running** = Only uses data within running spans for determining outliers
 - **IQR** = Same restriction, but also applies interquantile range filtering (data within the 25%-75% percentile)
 - **None** = Applies no filtering to what is included in outlier determination
+
+If you are enountering outliers near the end of your running span and want to exclude them, adjust the **Running Span Threshold** in the **Plot Options** menu.
 
 ---
 
@@ -119,7 +101,7 @@ For macOS (Intel/Silicon):
 pyinstaller mac.spec
 ```
 
-Make sure assets are accessible via `resource_path()` in `file_parsing.py`.
+Make sure any additional assets are accessed via `resource_path()` in `file_parsing.py`.
 
 ---
 
@@ -130,6 +112,22 @@ Make sure assets are accessible via `resource_path()` in `file_parsing.py`.
 - Span logic and spec checks are implemented in `manipulation.py`
 - Data loading and JSON resources handled by `file_parsing.py`
 - Project adheres to no-new-dependency policy (pure stdlib + matplotlib, pandas, numpy)
+
+---
+
+## 📂 File Structure
+
+```
+├── assets/
+│   ├── icon.ico
+│   ├── logo.png
+│   └── [model].json          # e.g., TG10.json for variable specs
+├── scripts/
+│   ├── data_processing.py    # Plotting logic
+│   ├── manipulation.py       # Span detection, spec stats, filtering
+│   ├── file_parsing.py       # File loading, JSON resource path
+│   └── sim_gui.py            # Tkinter main app
+```
 
 ---
 
