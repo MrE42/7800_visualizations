@@ -71,7 +71,8 @@ class App:
             plot_window = tk.Toplevel(self.root)
             plot_window.title("Data Plot Viewer")
             plot_window.geometry("1200x800")
-            plot_window.iconbitmap(resource_path("assets/icon.ico"))
+            # plot_window.iconbitmap(resource_path("assets/icon.ico"))
+            set_icon(plot_window)
             embed_plot_7800_data(plot_window, self.data_paths)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to plot:\n{self.data_paths}\n\n{e}")

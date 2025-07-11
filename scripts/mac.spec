@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='7800_vis_mac',
+    name='7800_vis',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,5 +35,12 @@ exe = EXE(
     target_arch='universal2',
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\icon.ico'],
+    icon=['assets/icon.icns'],
+)
+
+app = BUNDLE(
+    exe,
+    name='7800_vis.app',
+    icon='assets/icon.icns',
+    bundle_identifier=None,
 )
