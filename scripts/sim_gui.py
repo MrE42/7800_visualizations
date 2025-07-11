@@ -81,6 +81,9 @@ class App:
 if __name__ == "__main__":
     root = tk.Tk()
     set_icon(root)
+    ico = Image.open(resource_path('assets/icon.png'))
+    photo = ImageTk.PhotoImage(ico)
+    root.wm_iconphoto(True, photo)
 
     def on_closing():
         root.destroy()
