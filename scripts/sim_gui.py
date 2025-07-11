@@ -5,7 +5,7 @@ import sys
 from data_processing import embed_plot_7800_data
 
 # To allow the exe to access assets
-from file_parsing import resource_path, set_icon
+from file_parsing import resource_path
 
 from version import __version__
 
@@ -14,8 +14,6 @@ class App:
         self.root = root
         self.root.title(f"7800 Data Viewer v{__version__}")
         self.root.geometry("650x250")
-        icon_path = resource_path("assets/icon.ico")
-        set_icon(root)
         self.root.resizable(False, False)
 
         top_frame = tk.Frame(root)
@@ -71,8 +69,6 @@ class App:
             plot_window = tk.Toplevel(self.root)
             plot_window.title("Data Plot Viewer")
             plot_window.geometry("1200x800")
-            # plot_window.iconbitmap(resource_path("assets/icon.ico"))
-            set_icon(plot_window)
             embed_plot_7800_data(plot_window, self.data_paths)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to plot:\n{self.data_paths}\n\n{e}")
@@ -80,7 +76,6 @@ class App:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    set_icon(root)
     ico = Image.open(resource_path('assets/icon.png'))
     photo = ImageTk.PhotoImage(ico)
     root.wm_iconphoto(True, photo)

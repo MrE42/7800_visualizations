@@ -138,8 +138,6 @@ def embed_plot_7800_data(parent_frame, filepaths):
         options_win = tk.Toplevel(parent_frame)
         options_win.title("Plot Options")
         options_win.geometry("280x400")
-        #options_win.iconbitmap(resource_path("assets/icon.ico"))
-        set_icon(options_win)
 
         # Line thickness
         tk.Label(options_win, text="Line Thickness:").pack(pady=(5, 0))
@@ -508,8 +506,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         stats_win = tk.Toplevel(parent_frame)
         stats_win.title("Statistics Window")
         stats_win.geometry("280x600")
-        # stats_win.iconbitmap(resource_path("assets/icon.ico"))
-        set_icon(stats_win)
+
         stats_win_ref = stats_win
 
         tk.Label(stats_win, text="Visible & Running Segment Stats", font=("Helvetica", 12, "bold")).pack(pady=10)
@@ -529,8 +526,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         window = tk.Toplevel(parent)
         window.title("Configure Variables")
         window.geometry("1000x600")
-        # window.iconbitmap(resource_path("assets/icon.ico"))
-        set_icon(window)
+
 
         config_frame = tk.Frame(window)
         config_frame.pack(fill='both', expand=True, padx=10, pady=10)
