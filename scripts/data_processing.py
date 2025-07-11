@@ -81,6 +81,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
     fig.suptitle(f"LI-78{model[2]}{model[3]}: {serial}", fontsize=14)
     lines = {}
     colors = {}
+    thismanager = plt.get_current_fig_manager()
+    thismanager.window.wm_iconbitmap(resource_path("assets/icon.ico"))
 
     break_on_gaps_enabled = True  # default, updated by Plot Options
     # Example time_col assignment from earlier:
