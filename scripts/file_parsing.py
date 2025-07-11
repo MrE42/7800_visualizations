@@ -4,7 +4,12 @@ import pandas as pd
 import numpy as np
 import sys
 import json
+from PIL import Image, ImageTk
 
+def set_icon(r):
+    ico = Image.open(resource_path('assets/icon.png'))
+    photo = ImageTk.PhotoImage(ico)
+    r.wm_iconphoto(True, photo)
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
