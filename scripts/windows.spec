@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='sim_gui',
+    name='7800_vis',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
