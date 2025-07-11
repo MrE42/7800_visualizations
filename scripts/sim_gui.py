@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 import sys
-import os
 from data_processing import embed_plot_7800_data
 
 # To allow the exe to access assets
@@ -40,20 +39,27 @@ class App:
 
     def add_file_selector(self, parent, label, var, command):
         row = tk.Frame(parent)
-        row.pack(fill='x', pady=5)
+        row.pack(pady=5, fill='x')
 
-        tk.Label(row, text=label, width=15, anchor='w').pack(side='left')
-        entry = tk.Entry(row, textvariable=self.file_display_var, width=50, state='readonly')
-        entry.pack(side='left', padx=5)
+        tk.Label(row, text=label, anchor='w').grid(row=0, column=0, padx=(0, 5), sticky='w')
+        entry = tk.Entry(row, textvariable=self.file_display_var, state='readonly')
+        entry.grid(row=0, column=1, sticky='ew', padx=(0, 5))
         entry.bind("<Button-1>", lambda e: command())
-        tk.Button(row, text="Browse", command=command).pack(side='left')
+
+        browse_btn = tk.Button(row, text="Browse", command=command)
+        browse_btn.grid(row=0, column=2)
+
+        row.columnconfigure(1, weight=1)  # Allow the entry field to expand nicely
 
     def browse_data(self):
         paths = filedialog.askopenfilenames(filetypes=[("7800 .data Files", "*.data")])
         if paths:
             self.data_paths = list(paths)
             num_files = len(self.data_paths)
-            display_text = f"{num_files} file(s) selected"
+            if num_files == 1:
+                display_text = f"{num_files} file selected"
+            else:
+                display_text = f"{num_files} files selected"
             self.file_display_var.set(display_text)
 
     def plot_file(self):

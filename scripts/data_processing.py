@@ -1,17 +1,12 @@
-from tkinter import messagebox
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-import pandas as pd
-import numpy as np
 import tkinter as tk
 from unicodedata import normalize
-import os
-import json
 from datetime import datetime
 import pytz
-from matplotlib.ticker import FixedLocator, ScalarFormatter, FuncFormatter
+from matplotlib.ticker import ScalarFormatter, FuncFormatter
 from tkinter import ttk, messagebox
 from manipulation import *
 from file_parsing import *
@@ -25,33 +20,27 @@ def embed_plot_7800_data(parent_frame, filepaths):
     time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
     x = df[time_col]
 
-    # Load range config for this model
-    config_path = resource_path(os.path.join("assets", f"{model}.json"))
+    #load json config for the model
+    raw_config = load_variable_config(model)
+
+    def normalize_key(key):
+        return normalize('NFC', key.strip())
+
+    normalized_config = {normalize_key(k): v for k, v in raw_config.items()}
     variable_config = {}
 
-    if os.path.exists(config_path):
-        with open(config_path, 'r') as f:
-            raw_config = json.load(f)
+    print("\n📄 Normalized config keys:")
+    for key in normalized_config:
+        print(f"  - {repr(key)}")
 
-            def normalize_key(key):
-                return normalize('NFC', key.strip())
-
-            normalized_config = {normalize_key(k): v for k, v in raw_config.items()}
-
-            print("\n📄 Normalized config keys:")
-            for key in normalized_config:
-                print(f"  - {repr(key)}")
-
-            print("\n📊 Normalized DataFrame columns:")
-            for col in df.columns:
-                norm_col = normalize_key(col)
-                print(f"  - {repr(norm_col)}")
-                if norm_col in normalized_config:
-                    variable_config[col] = normalized_config[norm_col]
-                else:
-                    print(f"    ⚠️  No match found for: {repr(norm_col)}")
-    else:
-        print("<UNK> Config file not found.")
+    print("\n📊 Normalized DataFrame columns:")
+    for col in df.columns:
+        norm_col = normalize_key(col)
+        print(f"  - {repr(norm_col)}")
+        if norm_col in normalized_config:
+            variable_config[col] = normalized_config[norm_col]
+        else:
+            print(f"    ⚠️  No match found for: {repr(norm_col)}")
 
     print("\n🔍 Identifying startup and outlier regions...")
     spans = identify_operational_spans(df)
@@ -136,7 +125,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 widget.destroy()
 
     # Toggles
-    hide_outliers_mode = tk.StringVar(value="IQR")  # Options: None, IQR, Running
+    hide_outliers_mode = tk.StringVar(value="Running")  # Options: None, IQR, Running
     use_human_time = tk.BooleanVar(value=True)
     gap_toggle_var = tk.BooleanVar(value=True)
     gap_threshold = tk.IntVar(value=2)
@@ -190,10 +179,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         run_thresh_entry.pack(pady=5, padx=10)
 
         def apply():
-            nonlocal break_on_gaps_enabled
-            nonlocal spans
-            nonlocal df
-            nonlocal spans_changed
+            nonlocal break_on_gaps_enabled, spans, df, spans_changed
             lw = float(slider.get())
             try:
                 val = float(gap_thresh_entry.get())
@@ -206,7 +192,6 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 if v != run_threshold.get():
                     run_threshold.set(v)
                     spans = identify_operational_spans(df, run_threshold.get())
-                    print("Made it here")
                     spans_changed = True
                 on_zoom()
             except ValueError:
@@ -325,9 +310,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
     update_legend()
     spans_drawn = False
     def rescale():
-        nonlocal spans_drawn
-        nonlocal spans
-        nonlocal spans_changed
+        nonlocal spans_drawn, spans, spans_changed
 
         mode = hide_outliers_mode.get()
         ymins, ymaxs = [], []
@@ -501,10 +484,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         stats_text_ref.config(state='disabled')
 
     def on_zoom(event_ax = None):
-        nonlocal validation_results
-        nonlocal latest_stats
-        nonlocal variable_config
-        print("zooming")
+        nonlocal validation_results, latest_stats, variable_config
         validation_results, latest_stats = update_spec_checks(ax, df, variable_config, [r for _, r in spans], validation_results, run_threshold.get(), hide_outliers_mode.get())
         update_listbox()
         update_stats_window()

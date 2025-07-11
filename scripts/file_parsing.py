@@ -107,5 +107,45 @@ def clean_error_codes(df):
 
     return df
 
+
+def load_variable_config(model, config_folder="assets"):
+    """
+    Safely loads a variable config JSON. If missing, empty, or invalid, creates a default file.
+    Returns the loaded or created config dictionary.
+    """
+
+    filename = os.path.join(config_folder, f"{model}.json")
+    filepath = resource_path(filename)
+
+    def create_empty_config(path):
+        empty_config = {}
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(empty_config, f, indent=2, ensure_ascii=True)
+            print(f"✅ Created empty config at {path}")
+        except Exception as e:
+            print(f"❌ Failed to create default config: {e}")
+        return empty_config
+
+    try:
+        if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+            print(f"⚠️ Config file {filepath} not found or empty.")
+            return create_empty_config(filepath)
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            if not isinstance(config, dict):
+                print(f"⚠️ Config file {filepath} is not a valid dictionary.")
+                return create_empty_config(filepath)
+            return config
+
+    except json.JSONDecodeError:
+        print(f"⚠️ Config file {filepath} is corrupted or not valid JSON.")
+        return create_empty_config(filepath)
+    except Exception as e:
+        print(f"❌ Unexpected error loading config: {e}")
+        return create_empty_config(filepath)
+
+
 # Written by Elijah Schoneweis - 6/11/2025
-#fig.suptitle(f"LI-78{model[2]}{model[3]} Data Visualization", fontsize=14)
