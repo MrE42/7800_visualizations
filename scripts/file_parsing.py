@@ -6,11 +6,15 @@ import sys
 import json
 import tkinter as tk
 
+og = True
 def set_icon(root):
-    # Load the image file from disk.
-    icon = tk.PhotoImage(file=resource_path('assets/icon.png'))
-    # Set it as the window icon.
-    root.iconphoto(True, icon)
+    if og:
+        root.iconbitmap(resource_path("assets/icon.ico"))
+    else:
+        # Load the image file from disk.
+        icon = tk.PhotoImage(file=resource_path('assets/icon.png'))
+        # Set it as the window icon.
+        root.iconphoto(True, icon)
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))

@@ -80,7 +80,7 @@ class App:
 
 if __name__ == "__main__":
     root = tk.Tk()
-
+    set_icon(root)
 
     def on_closing():
         root.destroy()
