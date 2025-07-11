@@ -5,7 +5,7 @@ import sys
 from data_processing import embed_plot_7800_data
 
 # To allow the exe to access assets
-from file_parsing import resource_path
+from file_parsing import resource_path, set_icon
 
 from version import __version__
 
@@ -15,7 +15,7 @@ class App:
         self.root.title(f"7800 Data Viewer v{__version__}")
         self.root.geometry("650x250")
         icon_path = resource_path("assets/icon.ico")
-        root.iconbitmap(icon_path)
+        set_icon(root)
         self.root.resizable(False, False)
 
         top_frame = tk.Frame(root)

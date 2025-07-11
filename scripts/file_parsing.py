@@ -4,6 +4,13 @@ import pandas as pd
 import numpy as np
 import sys
 import json
+import tkinter as tk
+
+def set_icon(root):
+    # Load the image file from disk.
+    icon = tk.PhotoImage(file=resource_path('assets/icon.png'))
+    # Set it as the window icon.
+    root.iconphoto(True, icon)
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
