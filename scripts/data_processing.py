@@ -109,6 +109,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
     ax.set_ylabel("Value")
     ax.grid(True)
 
+    set_icon(parent_frame)
+
     canvas_frame = tk.Frame(parent_frame)
     canvas_frame.pack(side='left', fill='both', expand=True)
 
