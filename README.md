@@ -1,4 +1,7 @@
-# LI-7800 Series Data Viewer
+<h1>
+  LI-7800 Series Data Viewer
+  <img align="right" src="./scripts/assets/logo.png" alt="LI-COR" width="120"/>
+</h1>
 
 **LI-7800 Series Data Viewer** is a cross-platform graphical interface for visualizing and analyzing `.data` files produced by LI-COR 7800 series instruments (e.g., LI-7810). It provides span-based data segmentation, spec validation, and intuitive interaction with multivariable time-series plots.
 
