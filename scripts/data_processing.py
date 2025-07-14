@@ -128,12 +128,12 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 widget.destroy()
 
     # Toggles
-    hide_outliers_mode = tk.StringVar(value="Running")  # Options: None, IQR, Running
+    hide_outliers_mode = tk.StringVar(value="None")  # Options: None, IQR, Running
     use_human_time = tk.BooleanVar(value=True)
     gap_toggle_var = tk.BooleanVar(value=True)
     gap_threshold = tk.IntVar(value=2)
     draw_spans_var = tk.BooleanVar(value=True)
-    run_threshold = tk.IntVar(value=2)
+    run_threshold = tk.IntVar(value=0)
     spans_changed = False
 
     def open_plot_options():
@@ -250,7 +250,11 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     variable_names = list(lines.keys())
 
+    def ignore_event(event):
+        return "break"
 
+    for event in ("<Button-1>", "<B1-Motion>", "<Double-1>", "<Triple-1>", "<ButtonRelease-1>"):
+        textbox.bind(event, ignore_event)
 
     # Updating the variable list
     def update_listbox(*args):
@@ -266,18 +270,22 @@ def embed_plot_7800_data(parent_frame, filepaths):
             checkmark = "☑" if visible else "☐"
             status = validation_results.get(var, "unclassified")
             icon, color = {
-                "within typical": ("✅", "green"),
+                "within typical": ("⭕", "green"),
                 "outside typical": ("⚠️", "orange"),
                 "outside absolute": ("❌", "red"),
                 "unclassified": ("❓", "gray")
             }.get(status, ("❓", "gray"))
 
-            line_text = f"{checkmark} {icon} {re.match(r"^[^(]*", var).group()}\n"
+            display_name = re.match(r"^[^(]*", var).group().strip()
+            line_text = f"{checkmark} {icon} {display_name}\n"
             start_idx = textbox.index("end-1c")
             end_idx = f"{start_idx}+{len(line_text)}c"
             textbox.insert("end", line_text)
-            textbox.tag_add(var, start_idx, end_idx)
-            textbox.tag_config(var, foreground=color)
+
+            tag = f"var_{var}"
+            textbox.tag_add(tag, start_idx, end_idx)
+            textbox.tag_bind(tag, "<Double-1>", lambda e, v=var: toggle_variable_by_click_from_name(v))
+            textbox.tag_config(tag, foreground=color)
 
         textbox.config(
             state='disabled',
@@ -404,51 +412,22 @@ def embed_plot_7800_data(parent_frame, filepaths):
     search_var.trace_add('write', update_listbox)
 
     # Toggling functionality
-    def toggle_variable_by_click(event=None):
-        idx = textbox.index("@%d,%d" % (event.x, event.y))
-        line = textbox.get(f"{idx} linestart", f"{idx} lineend")
-        parts = line.split(maxsplit=2)
-        if len(parts) < 3:
-            return
-        var = parts[2]
+    def toggle_variable_by_click_from_name(var):
         if var not in lines:
             return
-
         line_obj = lines[var]
         line_obj.set_visible(not line_obj.get_visible())
         update_listbox()
         update_legend()
-
         rescale()
-        # Old Auto-rescale
-        # ymins, ymaxs = [], []
-        # for l in lines.values():
-        #     if l.get_visible():
-        #         y = l.get_ydata()
-        #         y = y[np.isfinite(y)]
-        #         if y.size > 0:
-        #             ymins.append(np.min(y))
-        #             ymaxs.append(np.max(y))
-        # if ymins and ymaxs:
-        #     ymin, ymax = min(ymins), max(ymaxs)
-        #     pad = (ymax - ymin) * 0.05
-        #     ax.set_ylim(ymin - pad, ymax + pad)
-        # canvas.draw()
 
-    def ignore_event(event):
-        return "break"
-
-    for event in ("<Button-1>", "<B1-Motion>", "<Double-1>", "<Triple-1>", "<ButtonRelease-1>"):
-        textbox.bind(event, ignore_event)
-
-    textbox.bind("<Double-1>", toggle_variable_by_click)  # Restore our double-click toggle
     textbox.bind("<ButtonRelease-1>", lambda e: "break")  # Ignore default selection effect
 
     e_legend_frame = tk.Frame(control_frame)
     e_legend_frame.pack(pady=10, padx=5, anchor='w')
 
     legend_items = [
-        ("✅", "Within Typical Range", "green"),
+        ("⭕", "Within Typical Range", "green"),
         ("⚠️", "Outside Typical Range", "orange"),
         ("❌", "Outside Absolute Range", "red"),
         ("❓", "Unclassified Restrictions", "gray")
