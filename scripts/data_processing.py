@@ -376,7 +376,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                     patch.remove()
 
         # Draw new spans only if toggled on
-        if (draw_spans_var.get() and not spans_drawn) or spans_changed:
+        if draw_spans_var.get() and (spans_changed or not spans_drawn):
             spans_drawn = True
             spans_changed = False
             print("spans drawn")
@@ -533,7 +533,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         config_frame = tk.Frame(window)
         config_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
-        columns = ("name", "typ_min", "typ_max", "abs_min", "abs_max", "autoplot")
+        columns = ("name", "abs_min", "typ_min", "typ_max", "abs_max", "autoplot")
         tree = ttk.Treeview(config_frame, columns=columns, show='headings')
         for col in columns:
             tree.heading(col, text=col)
@@ -550,22 +550,21 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 typ = settings.get("typical", ["", ""])
                 abs_ = settings.get("absolute", ["", ""])
                 autoplot = settings.get("autoplot", False)
-                tree.insert("", "end", iid=var, values=(var, typ[0], typ[1], abs_[0], abs_[1], autoplot))
+                tree.insert("", "end", iid=var, values=(var, abs_[0], typ[0], typ[1], abs_[1], autoplot))
 
-        def update_selected():
-            selected = tree.selection()
+        def update():
+            selected = tree.get_children()
             if not selected:
-                messagebox.showwarning("No Selection", "Select a variable to update.")
+                messagebox.showwarning("No Variables In Tree", "Select a variable to update.")
                 return
             for var in selected:
                 values = tree.item(var, "values")
                 try:
-                    variable_config[var]["typical"] = [float(values[1]), float(values[2])]
-                    variable_config[var]["absolute"] = [float(values[3]), float(values[4])]
+                    variable_config[var]["typical"] = [float(values[2]), float(values[3])]
+                    variable_config[var]["absolute"] = [float(values[1]), float(values[4])]
                     variable_config[var]["autoplot"] = values[5] in ("True", "true", "1")
                 except Exception as e:
                     messagebox.showerror("Update Error", f"{var}: {e}")
-            messagebox.showinfo("Updated", "Configuration updated.")
             try:
                 on_zoom()
             except Exception as e:
@@ -578,6 +577,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 variable_config.pop(var, None)
                 validation_results[var] = "unclassified"
             refresh_tree()
+            update()
             on_zoom()
 
         def add_variable():
@@ -602,6 +602,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                         "autoplot": False
                     }
                     refresh_tree()
+                    update()
                     top.destroy()
 
             ttk.Button(top, text="Add", command=confirm_add).pack(pady=10)
@@ -635,6 +636,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 values = list(tree.item(row)["values"])
                 values[col_idx] = new_value
                 tree.item(row, values=values)
+                update()
                 entry.destroy()
 
             entry.bind("<Return>", save_edit)
@@ -646,9 +648,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         btn_frame = tk.Frame(window)
         btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text="Update", command=update_selected).grid(row=0, column=0, padx=5)
-        ttk.Button(btn_frame, text="Remove", command=remove_selected).grid(row=0, column=1, padx=5)
-        ttk.Button(btn_frame, text="Add Variable", command=add_variable).grid(row=0, column=2, padx=5)
+        ttk.Button(btn_frame, text="Add", command=add_variable).grid(row=0, column=1, padx=5)
+        ttk.Button(btn_frame, text="Remove", command=remove_selected).grid(row=0, column=2, padx=5)
         ttk.Button(btn_frame, text="Save", command=save_changes).grid(row=0, column=3, padx=5)
 
         refresh_tree()
