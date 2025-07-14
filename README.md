@@ -58,8 +58,7 @@ To manage this:
   - 🖊 Modify typical/absolute ranges
   - ➕ Add/remove variables based on loaded file columns
   - ✅ Enable/disable autoplots
-
-When modifying a variable in the config, make sure to **Update** the variable to see your changes and **Save** your configuration before closing.
+  - 💾 Save local changes to change the defaults
 
 ---
 
