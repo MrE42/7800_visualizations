@@ -3,7 +3,7 @@
   <img align="right" src="./scripts/assets/logo.png" alt="LI-COR" width="120"/>
 </h1>
 
-**LI-7800 Series Data Viewer** is a cross-platform graphical interface for visualizing and analyzing `.data` files produced by LI-COR 7800 series instruments (e.g., LI-7810). It provides span-based data segmentation, spec validation, and intuitive interaction with multivariable time-series plots.
+**LI-7800 Series Data Viewer** is a cross-platform graphical interface for visualizing and analyzing `.data` files produced by LI-COR 7800 series instruments (e.g., LI-7810). It provides period-based data segmentation, spec validation, and intuitive interaction with multivariable time-series plots.
 
 ---
 
@@ -11,7 +11,7 @@
 
 - 📊 **Multi-variable plotting** of TGA `.data` files
 - 🔍 **Zoom and pan** support with dynamic data rescaling
-- ✅ **Startup and running span detection** (based on NDX and temperature thresholds)
+- ✅ **Startup and running period detection** (based on NDX and temperature thresholds)
 - ⚠️ **Outlier filtering** via IQR or running-only views
 - 📉 **Stats panel** with real-time min, max, mean, and range compliance
 - 🎛 **Config editor** for per-variable threshold editing and autoplots
@@ -62,9 +62,9 @@ To manage this:
 
 ---
 
-## 🧠 Span Logic
+## 🧠 Period Logic
 
-Span detection identifies:
+Period detection identifies:
 
 - 🟦 **Startup** = NDX present but not yet thermally stable (T ≥ 55°C/54°C)
 - 🟩 **Running** = Once thermally stable, and until the device stops indexing.
@@ -73,11 +73,11 @@ Span detection identifies:
 
 Valid outliers are used to determine the initial frame of data, and the validation ranges for each variable based on the configuration json. The options for handling are:
 
-- **Running** = Only uses data within running spans for determining outliers
+- **Running** = Only uses data within running periods for determining outliers
 - **IQR** = Same restriction, but also applies interquantile range filtering (data within the 25%-75% percentile)
 - **None** = Applies no filtering to what is included in outlier determination
 
-If you are enountering outliers near the end of your running span and want to exclude them, adjust the **Running Span Threshold** in the **Plot Options** menu.
+If you are enountering outliers near the end of your running periods and want to exclude them, adjust the **Running Period Threshold** in the **Plot Options** menu.
 
 ---
 
@@ -85,7 +85,7 @@ If you are enountering outliers near the end of your running span and want to ex
 
 - Files containing invalid codes (e.g., `-9999`) are auto-converted to `NaN` based on `assets/error_codes.json`.
 - If a JSON config for a model is missing or empty, a default template is generated.
-- Span detection failure or zooming to empty views will trigger graceful fallbacks.
+- Period detection failure or zooming to empty views will trigger graceful fallbacks.
 
 ---
 
@@ -111,7 +111,7 @@ Make sure any additional assets are accessed via `resource_path()` in `file_pars
 
 - GUI is managed via Tkinter (`sim_gui.py`)
 - Plotting is done with Matplotlib embedded in the Tk window
-- Span logic and spec checks are implemented in `manipulation.py`
+- Period logic and spec checks are implemented in `manipulation.py`
 - Data loading and JSON resources handled by `file_parsing.py`
 - Project adheres to no-new-dependency policy (pure stdlib + matplotlib, pandas, numpy)
 
@@ -126,7 +126,7 @@ Make sure any additional assets are accessed via `resource_path()` in `file_pars
 │   └── [model].json          # e.g., TG10.json for variable specs
 ├── scripts/
 │   ├── data_processing.py    # Plotting logic
-│   ├── manipulation.py       # Span detection, spec stats, filtering
+│   ├── manipulation.py       # Period detection, spec stats, filtering
 │   ├── file_parsing.py       # File loading, JSON resource path
 │   └── sim_gui.py            # Tkinter main app
 ```
