@@ -77,36 +77,63 @@ def embed_plot_7800_data(parent_frame, filepaths):
     print("Available DataFrame columns:", list(df.columns))
     print(model)
     serial = metadata.get("SN", "Unknown SN")
-    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
-    fig.suptitle(f"LI-78{model[2]}{model[3]}: {serial}", fontsize=14)
-    lines = {}
-    colors = {}
 
+    fig = plt.figure(figsize=(8, 5))
+    fig.suptitle(f"LI-78{model[2]}{model[3]}: {serial}", fontsize=14)
+    gs = fig.add_gridspec(4, 1, hspace=0.0)
+
+    subplot_axes = [fig.add_subplot(gs[i, 0]) for i in range(4)]
+    for i, ax_sub in enumerate(subplot_axes):
+        ax_sub.set_visible(i == 0)
+        ax_sub.sharex(subplot_axes[0])  # All axes share x-axis
+
+
+    ax = subplot_axes[0]  # still use subplot_axes[0] as main
+    subplot_assignments = {}  # var_name → subplot index (0 = main)
 
     break_on_gaps_enabled = True  # default, updated by Plot Options
-    # Example time_col assignment from earlier:
-    time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
-    x = df[time_col]
-    plottable_columns = [col for col in df.columns if col != time_col and col not in ['NANOSECONDS (nsecs)', 'DATE (date)', 'TIME (time)']]
+
+    lines = {i: {} for i in range(len(subplot_axes))}  # subplot_index -> { var_name: line }
+    colors = {}
+
+    plottable_columns = [col for col in df.columns if
+                         col != time_col and col not in ['NANOSECONDS (nsecs)', 'DATE (date)', 'TIME (time)']]
     colormap = cm.get_cmap('berlin', len(plottable_columns))
+
     for i, col in enumerate(plottable_columns):
-        y = df[col]
-
-        if break_on_gaps_enabled:
-            x_plot, y_plot = insert_nan_gaps(x, y, threshold=2.0)
-        else:
-            x_plot, y_plot = x, y
-
-        config = variable_config.get(col, {})
-        should_plot = config.get("autoplot", False)
         color = mcolors.to_hex(colormap(i))
-        line, = ax.plot(x_plot, y_plot, label=col, linewidth=1.5, visible=should_plot, color=color)
-        lines[col] = line
         colors[col] = color
 
+    # Preload lines[0] with invisible Line2D objects so variables show up in list
+    plotted = 0
+    for col in plottable_columns:
+        color = colors[col]
+        y = df[col]
+        x_data = df[time_col]
 
-    ax.set_xlabel(time_col)
-    ax.set_ylabel("Value")
+        if break_on_gaps_enabled:
+            x_plot, y_plot = insert_nan_gaps(x_data, y, threshold=2)
+        else:
+            x_plot, y_plot = x_data, y
+
+        should_autoplot = variable_config.get(col, {}).get("autoplot", False)
+
+        # Determine subplot index for autoplotting
+        if should_autoplot:
+            subplot_idx = plotted % len(subplot_axes)
+            plotted += 1
+        else:
+            subplot_idx = 0
+
+        subplot_assignments[col] = subplot_idx
+        ax_target = subplot_axes[subplot_idx]
+
+        line, = ax_target.plot(x_plot, y_plot, label=col, linewidth=1.5, color=color)
+        line.set_visible(should_autoplot)
+        lines[subplot_idx][col] = line
+
+    #ax.set_xlabel(time_col)
+    #ax.set_ylabel("Value")
     ax.grid(True)
 
     set_icon(parent_frame)
@@ -171,11 +198,11 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         tk.Checkbutton(
             options_win,
-            text="Draw Startup/Running Spans",
+            text="Draw Startup/Running Periods",
             variable=draw_spans_var
         ).pack(pady=5)
 
-        tk.Label(options_win, text="Running Span Threshold (seconds):").pack(pady=(5, 0))
+        tk.Label(options_win, text="Running Period Threshold (seconds):").pack(pady=(5, 0))
         run_thresh_entry = tk.Entry(options_win)
         run_thresh_entry.insert(0, str(run_threshold.get()))
         run_thresh_entry.pack(pady=5, padx=10)
@@ -199,24 +226,28 @@ def embed_plot_7800_data(parent_frame, filepaths):
             except ValueError:
                 messagebox.showerror("Invalid Input", "Running end threshold must be a number.")
                 return
+            # Update linewidths and optionally reload data with or without gaps
             if break_on_gaps_enabled != gap_toggle_var.get():
                 break_on_gaps_enabled = gap_toggle_var.get()
-                for var, line in lines.items():
+                for idx, ax_lines in lines.items():
+                    for var, line in ax_lines.items():
+                        line.set_linewidth(lw)
+
+                        # Reload x/y data with or without gaps
+                        x = df[time_col]
+                        y = df[var]
+                        if break_on_gaps_enabled:
+                            x_plot, y_plot = insert_nan_gaps(x, y, threshold=gap_threshold.get())
+                        else:
+                            x_plot, y_plot = x, y
+
+                        line.set_xdata(x_plot)
+                        line.set_ydata(y_plot)
+
+            # ✅ Corrected linewidth update across all subplot lines
+            for subplot_dict in lines.values():
+                for line in subplot_dict.values():
                     line.set_linewidth(lw)
-
-                    # Reload x/y data with or without gaps
-                    x = df[time_col]
-                    y = df[var]
-                    if break_on_gaps_enabled:
-                        x_plot, y_plot = insert_nan_gaps(x, y, threshold=gap_threshold.get())
-                    else:
-                        x_plot, y_plot = x, y
-
-                    line.set_xdata(x_plot)
-                    line.set_ydata(y_plot)
-
-            for line in lines.values():
-                line.set_linewidth(lw)
 
             rescale()
 
@@ -248,7 +279,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
         takefocus=0
     )  # make it read-only after inserting
 
-    variable_names = list(lines.keys())
+    variable_names = []
+    for subplot in lines.values():
+        variable_names.extend(subplot.keys())
 
     def ignore_event(event):
         return "break"
@@ -261,12 +294,25 @@ def embed_plot_7800_data(parent_frame, filepaths):
         search_term = search_var.get().lower()
         textbox.config(state='normal')
         textbox.delete("1.0", "end")
+        # Keep original column order (as in the DataFrame)
+        ordered_columns = list(df.columns)  # Or however you reference the original DataFrame
+        plotted_vars = {k for subplot in lines.values() for k in subplot}
+        variable_names = [col for col in ordered_columns if col in plotted_vars]
 
         for var in variable_names:
+            print("Variable: " + var)
             if search_term not in var.lower() and search_term not in [""]:
                 continue
 
-            visible = lines[var].get_visible()
+            visible = False
+            for idx, subplot in lines.items():
+                if var in subplot:
+                    line = subplot[var]
+                    visible = line.get_visible()
+                    break
+            else:
+                continue
+
             checkmark = "☑" if visible else "☐"
             status = validation_results.get(var, "unclassified")
             icon, color = {
@@ -307,14 +353,16 @@ def embed_plot_7800_data(parent_frame, filepaths):
         for widget in legend_frame.winfo_children():
             widget.destroy()
         for var in variable_names:
-            if lines[var].get_visible():
-                row = tk.Frame(legend_frame)
-                row.pack(fill='x', padx=2, pady=1)
-                swatch = tk.Label(row, bg=colors[var], width=2, height=1)
-                swatch.pack(side='left')
-                label = tk.Label(row, text=var, anchor='w')
-                label.pack(side='left')
-                legend_labels[var] = label
+            for idx, subplot in lines.items():
+                if var in subplot:
+                    if subplot[var].get_visible():
+                        row = tk.Frame(legend_frame)
+                        row.pack(fill='x', padx=2, pady=1)
+                        swatch = tk.Label(row, bg=colors[var], width=2, height=1)
+                        swatch.pack(side='left')
+                        label = tk.Label(row, text=var, anchor='w')
+                        label.pack(side='left')
+                        legend_labels[var] = label
 
     update_listbox()
     update_legend()
@@ -340,86 +388,147 @@ def embed_plot_7800_data(parent_frame, filepaths):
         else:
             combined_mask = visible_mask
 
-        for var, line in lines.items():
-            if not line.get_visible():
-                continue
-
-            y_data = df[var][combined_mask].dropna()
-
-            if y_data.empty:
-                continue
-
-            # Hide outliers using IQR method
-            if mode == "IQR":
-                Q1 = np.percentile(y_data, 25)
-                Q3 = np.percentile(y_data, 75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-                y_data = y_data[(y_data >= lower_bound) & (y_data <= upper_bound)]
-
-
-            if y_data.empty:
-                continue
-
-            ymins.append(y_data.min())
-            ymaxs.append(y_data.max())
-
-        if ymins and ymaxs:
-            ymin, ymax = min(ymins), max(ymaxs)
-            if ymin == ymax:
-                ax.set_ylim(ymin - 1, ymax + 1)
+        # Ensure only the bottom subplot shows x-axis labels
+        visible_axes = [ax for ax in subplot_axes if ax.get_visible()]
+        for i, ax_sub in enumerate(visible_axes):
+            if i == len(visible_axes) - 1:
+                ax_sub.tick_params(labelbottom=True)
             else:
-                pad = (ymax - ymin) * 0.05
-                ax.set_ylim(ymin - pad, ymax + pad)
-        else:
-            print("⚠️ No data for rescaling. Skipping set_ylim.")
+                ax_sub.tick_params(labelbottom=False)
 
-        # Remove old spans first
-        if (not draw_spans_var.get() and spans_drawn) or spans_changed:
-            spans_drawn = False
-            print("spans erased")
-            for patch in ax.patches[:]:
-                if getattr(patch, "_span", False):
-                    patch.remove()
+            ax_sub.tick_params(axis='x', rotation=45, labelsize=8)
 
-        # Draw new spans only if toggled on
-        if draw_spans_var.get() and (spans_changed or not spans_drawn):
-            spans_drawn = True
-            spans_changed = False
-            print("spans drawn")
-            for (startup_start, startup_end), (running_start, running_end) in spans:
-                start = ax.axvspan(startup_start, startup_end, color='blue', alpha=0.2, label='Starting')
-                run = ax.axvspan(running_start, running_end, color='green', alpha=0.1, label='Running')
-                start._span = True
-                run._span = True
+        for idx, ax_sub in enumerate(subplot_axes):
+            ymins, ymaxs = [], []
 
-        if use_human_time.get():
-            tz = pytz.timezone(metadata.get("Timezone", "UTC"))
-            ax.xaxis.set_major_formatter(FuncFormatter(
-                lambda x, _: datetime.fromtimestamp(x, tz).strftime("%Y-%m-%d %H:%M:%S") if x > 0 else ""
-            ))
-            ax.tick_params(axis='x', rotation=45, labelsize=8)
-        else:
-            ax.xaxis.set_major_locator(plt.AutoLocator())
-            ax.xaxis.set_major_formatter(ScalarFormatter())
-            ax.ticklabel_format(style='sci', axis='x', scilimits=(9, 9))  # keep sci formatting for large values
+            for subplot_index, subplot_dict in lines.items():
+                for var, line in subplot_dict.items():
+                    if subplot_assignments.get(var, 0) != idx or not line.get_visible():
+                        continue
 
-        canvas.draw()
+                    y_data = df[var][combined_mask].dropna()
+                    if y_data.empty:
+                        continue
+
+                    if mode == "IQR":
+                        Q1 = np.percentile(y_data, 25)
+                        Q3 = np.percentile(y_data, 75)
+                        IQR = Q3 - Q1
+                        lower_bound = Q1 - 1.5 * IQR
+                        upper_bound = Q3 + 1.5 * IQR
+                        y_data = y_data[(y_data >= lower_bound) & (y_data <= upper_bound)]
+
+                    if y_data.empty:
+                        continue
+
+                    ymins.append(y_data.min())
+                    ymaxs.append(y_data.max())
+
+                if ymins and ymaxs:
+                    ymin, ymax = min(ymins), max(ymaxs)
+                    pad = (ymax - ymin) * 0.05 if ymax != ymin else 1
+                    ax_sub.set_ylim(ymin - pad, ymax + pad)
+
+                else:
+                    print("⚠️ No data for rescaling. Skipping set_ylim.")
+
+                # Remove old spans on each subplot
+                if (not draw_spans_var.get() and spans_drawn) or spans_changed:
+                    spans_drawn = False
+                    for ax_target in subplot_axes:
+                        for patch in ax_target.patches[:]:
+                            if getattr(patch, "_span", False):
+                                patch.remove()
+
+                # Draw new spans only if toggled on
+                if draw_spans_var.get() and (spans_changed or not spans_drawn):
+                    spans_drawn = True
+                    spans_changed = False
+                    print("✅ spans drawn")
+                    for ax_target in subplot_axes:
+                        for (startup_start, startup_end), (running_start, running_end) in spans:
+                            start = ax_target.axvspan(startup_start, startup_end, color='blue', alpha=0.2)
+                            run = ax_target.axvspan(running_start, running_end, color='green', alpha=0.1)
+                            start._span = True
+                            run._span = True
+
+                if use_human_time.get():
+                    tz = pytz.timezone(metadata.get("Timezone", "UTC"))
+                    ax_sub.xaxis.set_major_formatter(FuncFormatter(
+                        lambda x, _: datetime.fromtimestamp(x, tz).strftime("%Y-%m-%d %H:%M:%S") if x > 0 else ""
+                    ))
+                    ax_sub.tick_params(axis='x', rotation=45, labelsize=8)
+                else:
+                    ax_sub.xaxis.set_major_locator(plt.AutoLocator())
+                    ax_sub.xaxis.set_major_formatter(ScalarFormatter())
+                    ax_sub.ticklabel_format(style='sci', axis='x', scilimits=(9, 9))
+
+            # Update subplot legends
+            for ax_sub in subplot_axes:
+                # Filter only visible lines
+                visible_lines = [line for line in ax_sub.lines if line.get_visible()]
+                if visible_lines:
+                    ax_sub.legend(handles=visible_lines, loc='upper right', fontsize='small', frameon=True)
+                else:
+                    if ax_sub.get_legend():
+                        ax_sub.get_legend().remove()
+
+            canvas.draw()
+
 
     rescale()
 
     search_var.trace_add('write', update_listbox)
 
+
     # Toggling functionality
     def toggle_variable_by_click_from_name(var):
-        if var not in lines:
+        if var not in colors:
             return
-        line_obj = lines[var]
-        line_obj.set_visible(not line_obj.get_visible())
-        update_listbox()
-        update_legend()
-        rescale()
+
+        def assign_to_subplot(index):
+            subplot_assignments[var] = index
+            ax_target = subplot_axes[index]
+
+            # Remove line from other subplots if it exists
+            for ax_idx, ax_lines in lines.items():
+                if var in ax_lines:
+                    ax_lines[var].remove()
+                    del ax_lines[var]
+
+            y = df[var]
+            x_data = df[time_col]
+            if break_on_gaps_enabled:
+                x_plot, y_plot = insert_nan_gaps(x_data, y, threshold=gap_threshold.get())
+            else:
+                x_plot, y_plot = x_data, y
+
+            line, = ax_target.plot(x_plot, y_plot, label=var, linewidth=1.5, color=colors[var])
+            lines[index][var] = line
+
+            update_listbox()
+            update_legend()
+            rescale()
+
+        if var in subplot_assignments:
+            # Remove from current subplot
+            subplot_index = subplot_assignments[var]
+            if var in lines[subplot_index]:
+                lines[subplot_index][var].set_visible(False)
+            subplot_assignments.pop(var, None)
+
+            update_listbox()
+            update_legend()
+            rescale()
+        else:
+            if len(subplot_axes) <= 1:
+                assign_to_subplot(0)
+            else:
+                sub_win = tk.Toplevel(parent_frame)
+                sub_win.title(f"Assign {var} to Subplot")
+                for i in range(len(subplot_axes)):
+                    tk.Button(sub_win, text=f"Subplot {i + 1}",
+                              command=lambda idx=i: (assign_to_subplot(idx), sub_win.destroy())).pack(padx=10, pady=5)
 
     textbox.bind("<ButtonRelease-1>", lambda e: "break")  # Ignore default selection effect
 
@@ -464,14 +573,34 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         stats_text_ref.config(state='disabled')
 
-    def on_zoom(event_ax = None):
-        nonlocal validation_results, latest_stats, variable_config
-        validation_results, latest_stats = update_spec_checks(ax, df, variable_config, [r for _, r in spans], validation_results, run_threshold.get(), hide_outliers_mode.get())
-        update_listbox()
-        update_stats_window()
+    zooming = False  # Define at the same level as on_zoom
 
-    # Connect the zoom (x-axis change) event
-    ax.callbacks.connect("xlim_changed", on_zoom)
+    def on_zoom(event=None):
+        nonlocal validation_results, latest_stats, variable_config, zooming
+
+        if zooming:
+            return
+        zooming = True
+
+        try:
+            source_ax = event.inaxes if hasattr(event, "inaxes") and event.inaxes else subplot_axes[0]
+            new_xlim = source_ax.get_xlim()
+
+            for ax_sub in subplot_axes:
+                if ax_sub != source_ax and ax_sub.get_visible():
+                    ax_sub.set_xlim(new_xlim)
+
+            validation_results, latest_stats = update_spec_checks(
+                subplot_axes[0], df, variable_config,
+                [r for _, r in spans],
+                validation_results,
+                run_threshold.get(),
+                hide_outliers_mode.get()
+            )
+            update_listbox()
+            update_stats_window()
+        finally:
+            zooming = False
 
     on_zoom()
 
@@ -501,6 +630,57 @@ def embed_plot_7800_data(parent_frame, filepaths):
     stats_btn = tk.Button(toolbar, text="Statistics", command=open_stats_window)
     stats_btn.pack(side='left')
 
+    def layout_subplots():
+        visible_axes = [ax for ax in subplot_axes if ax.get_visible()]
+        n = len(visible_axes)
+        if n == 0:
+            return
+
+        top_margin = 0.05
+        bottom_margin = 0.12
+        spacing = 0.02  # space between plots
+        available_height = 1.0 - top_margin - bottom_margin - (spacing * (n - 1))
+        subplot_height = available_height / n
+
+        for i, ax in enumerate(reversed(visible_axes)):
+            bottom = bottom_margin + i * (subplot_height + spacing)
+            ax.set_position([0.1, bottom, 0.85, subplot_height])
+
+            # X-labels only on bottom
+            ax.tick_params(labelbottom=(i == n - 1))
+            ax.tick_params(axis='x', rotation=45, labelsize=8)
+            ax.tick_params(axis='y', labelleft=True)
+
+    layout_subplots()
+
+    def add_subplot():
+        for ax_sub in subplot_axes:
+            if not ax_sub.get_visible():
+                ax_sub.grid(True)
+                ax_sub.set_visible(True)
+                break
+        layout_subplots()
+        rescale()
+        canvas.draw()
+
+    tk.Button(toolbar, text="Add Subplot", command=add_subplot).pack(side='left')
+    for ax_sub in subplot_axes:
+        ax_sub.callbacks.connect("xlim_changed", on_zoom)
+
+    def remove_subplot():
+        for ax_sub in reversed(subplot_axes[1:]):
+            if ax_sub.get_visible():
+                ax_sub.set_visible(False)
+                # Unassign any variables tied to this subplot
+                for var, idx in list(subplot_assignments.items()):
+                    if idx == subplot_axes.index(ax_sub):
+                        del subplot_assignments[var]
+                break
+        layout_subplots()
+        rescale()
+        canvas.draw()
+
+    tk.Button(toolbar, text="Hide Subplot", command=remove_subplot).pack(side='left')
 
     def edit_variable_config(parent, model_id, available_columns):
         nonlocal variable_config
@@ -635,6 +815,17 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     tk.Button(toolbar, text="Configure Variables", command=lambda: edit_variable_config(
         parent_frame, model, df.columns.tolist())).pack(side='left')
+
+
+    if plotted == 2:
+        add_subplot()
+    elif plotted == 3:
+        add_subplot()
+        add_subplot()
+    elif plotted >= 4:
+        add_subplot()
+        add_subplot()
+        add_subplot()
 
 if __name__ == "__main__":
     import sys
