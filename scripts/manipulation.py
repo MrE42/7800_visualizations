@@ -25,7 +25,7 @@ def insert_nan_gaps(x, y, threshold):
     return np.array(x_new), np.array(y_new)
 
 
-def identify_operational_spans(df, threshold= 2, time_col='SECONDS (secs)', cavity_col='CAVITY_T (°C)', enclosure_col='THERMAL_ENCLOSURE_T (°C)', index_col='NDX (index)', warmup_thresholds=(55, 54), max_gap=10):
+def identify_operational_spans(df, threshold= 2, time_col='SECONDS (secs)', cavity_col='CAVITY_T (°C)', enclosure_col='THERMAL_ENCLOSURE_T (°C)', index_col='NDX (index)', warmup_thresholds=(55, 54.5), max_gap=10):
     """
     Identify startup and running spans based on NDX activity and component temperature thresholds.
 
