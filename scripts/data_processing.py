@@ -118,19 +118,15 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         should_autoplot = variable_config.get(col, {}).get("autoplot", False)
 
-        # Determine subplot index for autoplotting
         if should_autoplot:
             subplot_idx = plotted % len(subplot_axes)
             plotted += 1
-        else:
-            subplot_idx = 0
+            subplot_assignments[col] = subplot_idx
+            ax_target = subplot_axes[subplot_idx]
 
-        subplot_assignments[col] = subplot_idx
-        ax_target = subplot_axes[subplot_idx]
-
-        line, = ax_target.plot(x_plot, y_plot, label=col, linewidth=1.5, color=color)
-        line.set_visible(should_autoplot)
-        lines[subplot_idx][col] = line
+            line, = ax_target.plot(x_plot, y_plot, label=col, linewidth=1.5, color=color)
+            line.set_visible(should_autoplot)
+            lines[subplot_idx][col] = line
 
     #ax.set_xlabel(time_col)
     #ax.set_ylabel("Value")
@@ -279,9 +275,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         takefocus=0
     )  # make it read-only after inserting
 
-    variable_names = []
-    for subplot in lines.values():
-        variable_names.extend(subplot.keys())
+    variable_names = plottable_columns
 
     def ignore_event(event):
         return "break"
@@ -291,27 +285,25 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     # Updating the variable list
     def update_listbox(*args):
+        nonlocal variable_names
         search_term = search_var.get().lower()
         textbox.config(state='normal')
         textbox.delete("1.0", "end")
         # Keep original column order (as in the DataFrame)
         ordered_columns = list(df.columns)  # Or however you reference the original DataFrame
-        plotted_vars = {k for subplot in lines.values() for k in subplot}
-        variable_names = [col for col in ordered_columns if col in plotted_vars]
 
         for var in variable_names:
             print("Variable: " + var)
             if search_term not in var.lower() and search_term not in [""]:
                 continue
 
-            visible = False
             for idx, subplot in lines.items():
                 if var in subplot:
                     line = subplot[var]
                     visible = line.get_visible()
                     break
             else:
-                continue
+                visible = False
 
             checkmark = "☑" if visible else "☐"
             status = validation_results.get(var, "unclassified")
@@ -529,6 +521,10 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 for i in range(len(subplot_axes)):
                     tk.Button(sub_win, text=f"Subplot {i + 1}",
                               command=lambda idx=i: (assign_to_subplot(idx), sub_win.destroy())).pack(padx=10, pady=5)
+
+        layout_subplots()
+        rescale()
+        canvas.draw()
 
     textbox.bind("<ButtonRelease-1>", lambda e: "break")  # Ignore default selection effect
 
