@@ -658,6 +658,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
         layout_subplots()
         rescale()
         canvas.draw()
+        toolbar.update()
+        toolbar.push_current()
 
     tk.Button(toolbar, text="Add Subplot", command=add_subplot).pack(side='left')
     for ax_sub in subplot_axes:
@@ -675,6 +677,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
         layout_subplots()
         rescale()
         canvas.draw()
+        toolbar.update()
+        toolbar.push_current()
 
     tk.Button(toolbar, text="Hide Subplot", command=remove_subplot).pack(side='left')
 
