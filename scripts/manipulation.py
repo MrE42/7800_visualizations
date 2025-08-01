@@ -78,19 +78,25 @@ def identify_operational_spans(df, threshold= 2, time_col='SECONDS (secs)', cavi
 
         startup_end_time = block_df[warmed_up].iloc[0][time_col]
         startup_span = (t_start, startup_end_time)
-        running_span = (startup_end_time + 1, t_end)
-
-        spans.append((startup_span, running_span))
+        running_end_time = t_end - threshold
+        running_span = (startup_end_time, running_end_time)
+        if running_end_time == t_end:
+            shutdown_span = (-1, -1) #No shutdown period alloted
+        else:
+            shutdown_span = (t_end - threshold, t_end)
+        spans.append((startup_span, running_span, shutdown_span))
 
         def fmt(ts): return datetime.fromtimestamp(ts, tz).strftime("%Y-%m-%d %H:%M:%S")
 
         print(f"🟦 Startup span: {fmt(startup_span[0])} to {fmt(startup_span[1])}")
         print(f"🟩 Running span: {fmt(running_span[0])} to {fmt(running_span[1])}")
+        if shutdown_span != (-1, -1):
+            print(f"🟥 Shutdown span: {fmt(shutdown_span[0])} to {fmt(shutdown_span[1])}")
 
-    print(f"✅ Done: {len(spans)*2} spans identified")
+    print(f"✅ Done: {len(spans)} periods identified")
     return spans
 
-def update_spec_checks(ax, df, variable_config, running_spans, results = {}, threshold = 2, mode = "None", time_col='SECONDS (secs)'):
+def update_spec_checks(ax, df, variable_config, spans, results = {}, mode = "None", time_col='SECONDS (secs)'):
     if time_col not in df:
         print("⚠️ DataFrame missing required time column for spec checks.")
         return results, {}
@@ -101,11 +107,9 @@ def update_spec_checks(ax, df, variable_config, running_spans, results = {}, thr
     # Combine all running span filters if needed
     if mode in ["Running", "IQR"]:
         running_mask = pd.Series(False, index=df.index)
-        for start, end in running_spans:
-            adjusted_end = end - threshold
-            if adjusted_end > start:
-                running_mask |= (df[time_col] >= start) & (df[time_col] <= adjusted_end)
-
+        for startup, running, stopping in spans:
+            r_start, r_end = running
+            running_mask |= (df[time_col] >= r_start) & (df[time_col] <= r_end)
         combined_mask = visible_mask & running_mask
     else:
         combined_mask = visible_mask
