@@ -15,6 +15,7 @@ from file_parsing import *
 def embed_plot_7800_data(parent_frame, filepaths):
     df, model, metadata = load_and_merge_files(filepaths)
 
+    #Searches for error codes and identifies them
     df = clean_error_codes(df)
 
     time_col = next((col for col in df.columns if "SECONDS" in col.upper()), df.columns[0])
@@ -75,16 +76,18 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     print("Loaded model config keys:", list(variable_config.keys()))
     print("Available DataFrame columns:", list(df.columns))
+
+    #Make the overarching window
     print(model)
     serial = metadata.get("SN", "Unknown SN")
-
     fig = plt.figure(figsize=(8, 5))
     fig.suptitle(f"LI-78{model[2]}{model[3]}: {serial}", fontsize=14)
     gs = fig.add_gridspec(4, 1, hspace=0.0)
 
+
     subplot_axes = [fig.add_subplot(gs[i, 0]) for i in range(4)]
     for i, ax_sub in enumerate(subplot_axes):
-        ax_sub.set_visible(i == 0)
+        ax_sub.set_visible(i == 0) # Initialize only one subplot to begin
         ax_sub.sharex(subplot_axes[0])  # All axes share x-axis
 
 
@@ -118,8 +121,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         should_autoplot = variable_config.get(col, {}).get("autoplot", False)
 
-        if should_autoplot:
-            subplot_idx = plotted % len(subplot_axes)
+        if should_autoplot: #Autoplotting functionality
+            subplot_idx = plotted % len(subplot_axes) # Determines which subplot the variable goes on (0-3)
             plotted += 1
             subplot_assignments[col] = subplot_idx
             ax_target = subplot_axes[subplot_idx]
@@ -132,16 +135,16 @@ def embed_plot_7800_data(parent_frame, filepaths):
     #ax.set_ylabel("Value")
     ax.grid(True)
 
-    set_icon(parent_frame)
+    set_icon(parent_frame) # Ensures the proper LI-COR icon for the application window
 
-    canvas_frame = tk.Frame(parent_frame)
+    canvas_frame = tk.Frame(parent_frame) # Canvas frame
     canvas_frame.pack(side='left', fill='both', expand=True)
 
-    canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
+    canvas = FigureCanvasTkAgg(fig, master=canvas_frame) # The main figure within said frame
     canvas.draw()
     canvas.get_tk_widget().pack(fill='both', expand=True)
 
-    toolbar = NavigationToolbar2Tk(canvas, canvas_frame)
+    toolbar = NavigationToolbar2Tk(canvas, canvas_frame) # The toolbar with
     toolbar.update()
     toolbar.pack(side='bottom', fill='x')
 
@@ -156,7 +159,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
     gap_toggle_var = tk.BooleanVar(value=True)
     gap_threshold = tk.IntVar(value=2)
     draw_spans_var = tk.BooleanVar(value=True)
-    run_threshold = tk.IntVar(value=0)
+    run_threshold = tk.IntVar(value=2)
     spans_changed = False
 
     def open_plot_options():
@@ -291,9 +294,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
         textbox.delete("1.0", "end")
         # Keep original column order (as in the DataFrame)
         ordered_columns = list(df.columns)  # Or however you reference the original DataFrame
-
+        print("List Updating...")
         for var in variable_names:
-            print("Variable: " + var)
+            #print("Variable: " + var)
             if search_term not in var.lower() and search_term not in [""]:
                 continue
 
@@ -371,11 +374,9 @@ def embed_plot_7800_data(parent_frame, filepaths):
         if mode == "Running" or mode == "IQR":
             # Combine all running span filters
             running_mask = pd.Series(False, index=df.index)
-            for startup, running in spans:
+            for startup, running, stopping in spans:
                 r_start, r_end = running
-                adjusted_end = r_end - run_threshold.get()
-                if adjusted_end > r_start:
-                    running_mask |= (df[time_col] >= r_start) & (df[time_col] <= adjusted_end)
+                running_mask |= (df[time_col] >= r_start) & (df[time_col] <= r_end)
             combined_mask = visible_mask & running_mask
         else:
             combined_mask = visible_mask
@@ -438,11 +439,15 @@ def embed_plot_7800_data(parent_frame, filepaths):
                     spans_changed = False
                     print("✅ spans drawn")
                     for ax_target in subplot_axes:
-                        for (startup_start, startup_end), (running_start, running_end) in spans:
+                        for (startup_start, startup_end), (running_start, running_end), (shutdown_start, shutdown_end) in spans:
                             start = ax_target.axvspan(startup_start, startup_end, color='blue', alpha=0.2)
-                            run = ax_target.axvspan(running_start, running_end, color='green', alpha=0.1)
                             start._span = True
+                            run = ax_target.axvspan(running_start, running_end, color='green', alpha=0.1)
                             run._span = True
+                            if (shutdown_start, shutdown_end) != (-1, -1):
+                                off = ax_target.axvspan(shutdown_start, shutdown_end, color='red', alpha=0.2)
+                                off._span = True
+
 
                 if use_human_time.get():
                     tz = pytz.timezone(metadata.get("Timezone", "UTC"))
@@ -588,9 +593,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
             validation_results, latest_stats = update_spec_checks(
                 subplot_axes[0], df, variable_config,
-                [r for _, r in spans],
+                spans,
                 validation_results,
-                run_threshold.get(),
                 hide_outliers_mode.get()
             )
             update_listbox()
@@ -656,10 +660,11 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 ax_sub.set_visible(True)
                 break
         layout_subplots()
-        rescale()
-        canvas.draw()
         toolbar.update()
         toolbar.push_current()
+        rescale()
+        canvas.draw()
+
 
     tk.Button(toolbar, text="Add Subplot", command=add_subplot).pack(side='left')
     for ax_sub in subplot_axes:
@@ -675,10 +680,11 @@ def embed_plot_7800_data(parent_frame, filepaths):
                         del subplot_assignments[var]
                 break
         layout_subplots()
-        rescale()
-        canvas.draw()
         toolbar.update()
         toolbar.push_current()
+        rescale()
+        canvas.draw()
+
 
     tk.Button(toolbar, text="Hide Subplot", command=remove_subplot).pack(side='left')
 
@@ -721,7 +727,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 try:
                     variable_config[var]["typical"] = [float(values[2]), float(values[3])]
                     variable_config[var]["absolute"] = [float(values[1]), float(values[4])]
-                    variable_config[var]["autoplot"] = values[5] in ("True", "true", "1")
+                    variable_config[var]["autoplot"] = values[5].lower() in ("true", "1")
                 except Exception as e:
                     messagebox.showerror("Update Error", f"{var}: {e}")
             try:
