@@ -24,7 +24,7 @@
 
 ### 🖥 Running Locally
 
-Packaged executables (`.exe` & `.app`) are supplied in Releases. You can also run the program using:
+Packaged executables (`.exe` & `.app`) are supplied in [Releases](https://github.com/MrE42/7800_visualizations/releases/). You can also run the program using:
 
 ```bash
 python scripts/sim_gui.py
@@ -68,7 +68,7 @@ Period detection identifies:
 
 - 🟦 **Startup** = NDX present but not yet thermally stable (T ≥ 55°C/54°C)
 - 🟩 **Running** = Once thermally stable, and until the device stops indexing.
-
+- 🟥 **Shutdown** = Period where the device is shutting down
 ## ⭕ Outlier Handling
 
 Valid outliers are used to determine the initial frame of data, and the validation ranges for each variable based on the configuration json. The options for handling are:
@@ -77,7 +77,7 @@ Valid outliers are used to determine the initial frame of data, and the validati
 - **IQR** = Same restriction, but also applies interquantile range filtering (data within the 25%-75% percentile)
 - **None** = Applies no filtering to what is included in outlier determination
 
-If you are enountering outliers near the end of your running periods and want to exclude them, adjust the **Running Period Threshold** in the **Plot Options** menu.
+If you are enountering outliers near the end of your running periods and want to exclude them, adjust the **Running Period Threshold** in the **Plot Options** menu. This directly changes the length of the **Shutdown** period.
 
 ---
 
