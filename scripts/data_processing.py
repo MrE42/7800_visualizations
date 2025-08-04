@@ -8,6 +8,7 @@ from datetime import datetime
 import pytz
 from matplotlib.ticker import ScalarFormatter, FuncFormatter
 from tkinter import ttk, messagebox
+from packaging.version import Version
 from manipulation import *
 from file_parsing import *
 
@@ -22,7 +23,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
     x = df[time_col]
 
     #load json config for the model
-    raw_config = load_variable_config(model)
+    tga_version = metadata.get("Software Version", "0.0.0")
+    raw_config = load_variable_config(model, tga_version, parent_frame)
 
     def normalize_key(key):
         return normalize('NFC', key.strip())
@@ -77,6 +79,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
     print("Loaded model config keys:", list(variable_config.keys()))
     print("Available DataFrame columns:", list(df.columns))
 
+    plot_options = load_plot_options(model)
+    
     #Make the overarching window
     print(model)
     serial = metadata.get("SN", "Unknown SN")
@@ -93,8 +97,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
     ax = subplot_axes[0]  # still use subplot_axes[0] as main
     subplot_assignments = {}  # var_name → subplot index (0 = main)
-
-    break_on_gaps_enabled = True  # default, updated by Plot Options
+    
+    break_on_gaps_enabled = plot_options.get("break_on_gaps", True)
 
     lines = {i: {} for i in range(len(subplot_axes))}  # subplot_index -> { var_name: line }
     colors = {}
@@ -148,24 +152,28 @@ def embed_plot_7800_data(parent_frame, filepaths):
     toolbar.update()
     toolbar.pack(side='bottom', fill='x')
 
+    version_status_frame = tk.Frame(toolbar)
+    version_status_frame.pack(side='right', padx=10, pady=2, anchor="e")
+
     if hasattr(toolbar, 'children'):
         for widget in toolbar.winfo_children():
             if isinstance(widget, tk.Button) and widget['command'] == toolbar.configure_subplots:
                 widget.destroy()
 
     # Toggles
-    hide_outliers_mode = tk.StringVar(value="None")  # Options: None, IQR, Running
-    use_human_time = tk.BooleanVar(value=True)
-    gap_toggle_var = tk.BooleanVar(value=True)
-    gap_threshold = tk.IntVar(value=2)
-    draw_spans_var = tk.BooleanVar(value=True)
-    run_threshold = tk.IntVar(value=2)
+    hide_outliers_mode = tk.StringVar(value=plot_options.get("outliers", "None")) # Options: None, IQR, Running
+    use_human_time = tk.BooleanVar(value=plot_options.get("use_human_time", True))
+    gap_toggle_var = tk.BooleanVar(value=break_on_gaps_enabled)
+    gap_threshold = tk.IntVar(value=plot_options.get("gap_threshold", 2))
+    draw_spans_var = tk.BooleanVar(value=plot_options.get("draw_spans", True))
+    run_threshold = tk.IntVar(value=plot_options.get("run_threshold", 2))
+    tga_newest = tk.StringVar(value=plot_options.get("tga_newest", tga_version))
     spans_changed = False
 
     def open_plot_options():
         options_win = tk.Toplevel(parent_frame)
         options_win.title("Plot Options")
-        options_win.geometry("280x400")
+        options_win.geometry("280x460")
 
         # Line thickness
         tk.Label(options_win, text="Line Thickness:").pack(pady=(5, 0))
@@ -206,19 +214,47 @@ def embed_plot_7800_data(parent_frame, filepaths):
         run_thresh_entry.insert(0, str(run_threshold.get()))
         run_thresh_entry.pack(pady=5, padx=10)
 
+        tk.Label(options_win, text="Latest TGA Software:").pack(pady=(5, 0))
+        tga_entry = tk.Entry(options_win)
+        tga_entry.insert(0, str(tga_newest.get()))
+        tga_entry.pack(pady=5, padx=10)
+
         def apply():
-            nonlocal break_on_gaps_enabled, spans, df, spans_changed
+            nonlocal break_on_gaps_enabled, spans, df, spans_changed, plot_options
+            try:
+                tg = tga_entry.get()
+                _ = Version(tg)
+                if Version(tga_newest.get()) != Version(tg):
+                    tga_newest.set(tg)
+                    update_version_status()
+                    if Version(tg) == Version(tga_version):
+                        # using latest version
+                        print("Using Latest Version")
+                    else:
+                        versions = [tg, tga_version]
+                        versions.sort(key=Version, reverse=True)
+                        if Version(versions[0]) == Version(tga_version):
+                            print("Using Version Newer Than Recorded")
+                        else:
+                            print("Using Old Version")
+
+            except Exception:
+                messagebox.showerror("Invalid Version",
+                                     f"'{tg}' is not a valid TGA version string. Please use format like '2.3.8'")
+                return
             lw = float(slider.get())
             try:
-                val = float(gap_thresh_entry.get())
-                gap_threshold.set(val)
+                ge = float(gap_thresh_entry.get())
+                gap_threshold.set(ge)
+                plot_options["gap_threshold"] = ge
             except ValueError:
                 messagebox.showerror("Invalid Input", "Gap threshold must be a number.")
                 return
             try:
-                v = float(run_thresh_entry.get())
-                if v != run_threshold.get():
-                    run_threshold.set(v)
+                rt = float(run_thresh_entry.get())
+                plot_options["run_threshold"] = rt
+                if rt != run_threshold.get():
+                    run_threshold.set(rt)
                     spans = identify_operational_spans(df, run_threshold.get())
                     spans_changed = True
                 on_zoom()
@@ -226,8 +262,10 @@ def embed_plot_7800_data(parent_frame, filepaths):
                 messagebox.showerror("Invalid Input", "Running end threshold must be a number.")
                 return
             # Update linewidths and optionally reload data with or without gaps
-            if break_on_gaps_enabled != gap_toggle_var.get():
-                break_on_gaps_enabled = gap_toggle_var.get()
+            gt = gap_toggle_var.get()
+            plot_options["break_on_gaps"] = gt
+            if break_on_gaps_enabled != gt:
+                break_on_gaps_enabled = gt
                 for idx, ax_lines in lines.items():
                     for var, line in ax_lines.items():
                         line.set_linewidth(lw)
@@ -249,17 +287,23 @@ def embed_plot_7800_data(parent_frame, filepaths):
                     line.set_linewidth(lw)
 
             rescale()
+            
+            plot_options["outliers"] = hide_outliers_mode.get()
+            plot_options["use_human_time"] = use_human_time.get()
+            plot_options["draw_spans"] = draw_spans_var.get()
+            plot_options["tga_newest"] = tga_newest.get()
+            save_plot_options(model, plot_options)
 
         tk.Button(options_win, text="Apply", command=apply).pack(pady=5)
+
+
 
     custom_btn = tk.Button(toolbar, text="Plot Options", command=open_plot_options)
     custom_btn.pack(side='left')
 
+    # Create container on right side
     control_frame = tk.Frame(parent_frame)
     control_frame.pack(side='right', fill='y')
-
-
-
 
     tk.Label(control_frame, text="Search Variable:", font=("Helvetica", 12, "bold")).pack(pady=(5, 2))
     search_var = tk.StringVar()
@@ -277,6 +321,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
         wrap='none',
         takefocus=0
     )  # make it read-only after inserting
+
 
     variable_names = plottable_columns
 
@@ -359,8 +404,40 @@ def embed_plot_7800_data(parent_frame, filepaths):
                         label.pack(side='left')
                         legend_labels[var] = label
 
+
+    def update_version_status():
+        for widget in version_status_frame.winfo_children():
+            widget.destroy()
+
+        current = Version(tga_version)
+        try:
+            latest = Version(tga_newest.get())
+        except:
+            latest = current
+
+        status_label = tk.Label(version_status_frame, font=("Helvetica", 10, "bold"))
+
+        if current < latest:
+            status_label.config(
+                text=f"TGA Version: {tga_version} (Outdated). Latest: {tga_newest.get()}",
+                fg="red"
+            )
+        elif current == latest:
+            status_label.config(
+                text=f"TGA Version: {tga_version} (Latest)",
+                fg="green"
+            )
+        else:
+            status_label.config(
+                text=f"TGA Version: {tga_version} (Newer than Recorded)",
+                fg="blue"
+            )
+
+        status_label.pack(anchor="ne", padx=5, pady=5)
+
     update_listbox()
     update_legend()
+    update_version_status()
     spans_drawn = False
     def rescale():
         nonlocal spans_drawn, spans, spans_changed
@@ -774,10 +851,7 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         def save_changes():
             try:
-                config_path = resource_path(f"assets/{model_id}.json")
-                with open(config_path, "w", encoding='utf-8') as f:
-                    json.dump(variable_config, f, indent=2, ensure_ascii=True)
-                messagebox.showinfo("Saved", f"Saved to {model_id}.json")
+                save_variable_config(model_id, tga_version, variable_config)
             except Exception as e:
                 messagebox.showerror("Save Error", str(e))
 
