@@ -68,7 +68,7 @@ class App:
         try:
             plot_window = tk.Toplevel(self.root)
             plot_window.title("Data Plot Viewer")
-            plot_window.geometry("1200x800")
+            plot_window.geometry("1600x800")
             set_icon(plot_window)
             embed_plot_7800_data(plot_window, self.data_paths)
         except Exception as e:
