@@ -5,6 +5,9 @@ import numpy as np
 import sys
 import json
 from PIL import Image, ImageTk
+import shutil
+from tkinter import messagebox
+from packaging.version import Version
 
 def set_icon(r):
     ico = Image.open(resource_path('assets/icon.png'))
@@ -113,45 +116,106 @@ def clean_error_codes(df):
 
     return df
 
+def get_local_config_dir():
+    return os.path.join(os.getenv("APPDATA", os.path.expanduser("~")), "LICOR", "7800", "configs")
 
-def load_variable_config(model, config_folder="assets"):
-    """
-    Safely loads a variable config JSON. If missing, empty, or invalid, creates a default file.
-    Returns the loaded or created config dictionary.
-    """
 
-    filename = os.path.join(config_folder, f"{model}.json")
-    filepath = resource_path(filename)
+def get_config_path(model, version):
+    return os.path.join(get_local_config_dir(), model, f"{version}.json")
 
-    def create_empty_config(path):
-        empty_config = {}
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(empty_config, f, indent=2, ensure_ascii=True)
-            print(f"✅ Created empty config at {path}")
-        except Exception as e:
-            print(f"❌ Failed to create default config: {e}")
-        return empty_config
+def find_existing_versions(model):
+    model_dir = os.path.join(get_local_config_dir(), model)
+    if not os.path.exists(model_dir):
+        return []
+    return [f.removesuffix(".json") for f in os.listdir(model_dir) if f.endswith(".json")]
 
+def load_variable_config(model_id, version_str=None, master=None):
+    # Determine software version
+    version = Version(version_str or "0.0.0")
+
+    # Ensure target path exists
+    local_dir = os.path.join(get_local_config_dir(), model_id)
+    os.makedirs(local_dir, exist_ok=True)
+
+    local_path = os.path.join(local_dir, f"{version}.json")
+
+    if os.path.exists(local_path):
+        print(f"Config File Found: {version}")
+        with open(local_path, "r", encoding='utf-8') as f:
+            return json.load(f)
+
+    # Check for any previous versions
+    existing_versions = find_existing_versions(model_id)
+    existing_versions.sort(key=Version, reverse=True)
+
+    if existing_versions:
+        latest_version = existing_versions[0]
+        if master:
+            response = messagebox.askyesno(
+                "New Software Version",
+                f"No config found for software version {version}.\n"
+                f"Would you like to copy from existing version {latest_version}?",
+                parent=master
+            )
+        else:
+            response = True  # fallback in non-GUI context
+
+        if response:
+            src = os.path.join(local_dir, f"{latest_version}.json")
+            shutil.copy(src, local_path)
+            with open(local_path, "r", encoding='utf-8') as f:
+                return json.load(f)
+
+    # Fall back to default in assets
     try:
-        if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
-            print(f"⚠️ Config file {filepath} not found or empty.")
-            return create_empty_config(filepath)
+        from file_parsing import resource_path  # safe circular import
+    except:
+        resource_path = lambda p: p  # fallback
 
-        with open(filepath, "r", encoding="utf-8") as f:
-            config = json.load(f)
-            if not isinstance(config, dict):
-                print(f"⚠️ Config file {filepath} is not a valid dictionary.")
-                return create_empty_config(filepath)
-            return config
+    default_path = resource_path(os.path.join("assets", "defaults", f"{model_id}.json"))
+    if os.path.exists(default_path):
+        with open(default_path, "r", encoding='utf-8') as f: # Open the default json for the model
+            default_config = json.load(f)
+        with open(local_path, "w", encoding='utf-8') as f: # Save the default where the current model/version is
+            json.dump(default_config, f, indent=2)
+        return default_config
 
-    except json.JSONDecodeError:
-        print(f"⚠️ Config file {filepath} is corrupted or not valid JSON.")
-        return create_empty_config(filepath)
+    # If all else fails, create an empty config
+    with open(local_path, "w", encoding='utf-8') as f:
+        json.dump({}, f, indent=2)
+    return {}
+
+def save_variable_config(model_id, version, config_dict):
+    path = get_config_path(model_id, version)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding='utf-8') as f:
+        json.dump(config_dict, f, indent=2)
+
+
+#Plot Options Saving/Loading
+
+def get_plot_options_path(model):
+    base_dir = os.path.join(get_local_config_dir(), model)
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "plot_options.json")
+
+def save_plot_options(model, options_dict):
+    path = get_plot_options_path(model)
+    try:
+        with open(path, "w") as f:
+            json.dump(options_dict, f, indent=4)
     except Exception as e:
-        print(f"❌ Unexpected error loading config: {e}")
-        return create_empty_config(filepath)
+        print(f"❌ Failed to save plot options: {e}")
+
+def load_plot_options(model):
+    path = get_plot_options_path(model)
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Failed to load plot options: {e}")
+    return {}
 
 
 # Written by Elijah Schoneweis - 6/11/2025
