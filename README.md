@@ -11,12 +11,13 @@
 
 - 📊 **Multi-variable plotting** of TGA `.data` files
 - 🔍 **Zoom and pan** support with dynamic data rescaling
-- ✅ **Startup and running period detection** (based on NDX and temperature thresholds)
+- ✅ **Startup, running and shutdown period detection** (based on NDX and temperature thresholds)
 - ⚠️ **Outlier filtering** via IQR or running-only views
 - 📉 **Stats panel** with real-time min, max, mean, and range compliance
 - 🎛 **Config editor** for per-variable threshold editing and autoplots
 - 🧱 **Error value masking** via customizable JSON
 - 🧪 **Supports multiple model types** (TG10, etc.)
+- 👾 **Differeniates between TGA Software versions** (2.3.8, etc.)
 
 ---
 
@@ -40,7 +41,7 @@ python scripts/sim_gui.py
 
 ## 🔧 Configuration JSON
 
-Each instrument model has a JSON file (e.g., `TG10.json`) defining:
+Each instrument model has a folder with JSON files for each TGA software version (e.g., `TG10/2.3.8.json`) defining:
 
 ```json
 {
@@ -69,6 +70,7 @@ Period detection identifies:
 - 🟦 **Startup** = NDX present but not yet thermally stable (T ≥ 55°C/54°C)
 - 🟩 **Running** = Once thermally stable, and until the device stops indexing.
 - 🟥 **Shutdown** = Period where the device is shutting down
+  
 ## ⭕ Outlier Handling
 
 Valid outliers are used to determine the initial frame of data, and the validation ranges for each variable based on the configuration json. The options for handling are:
@@ -123,7 +125,8 @@ Make sure any additional assets are accessed via `resource_path()` in `file_pars
 ├── assets/
 │   ├── icon.ico
 │   ├── logo.png
-│   └── [model].json          # e.g., TG10.json for variable specs
+│   └── defaults/
+│        └──[model].json          # e.g., TG10.json for default variable specs
 ├── scripts/
 │   ├── data_processing.py    # Plotting logic
 │   ├── manipulation.py       # Period detection, spec stats, filtering
