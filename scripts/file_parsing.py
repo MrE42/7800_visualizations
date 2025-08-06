@@ -127,7 +127,7 @@ def find_existing_versions(model):
     model_dir = os.path.join(get_local_config_dir(), model)
     if not os.path.exists(model_dir):
         return []
-    return [f.removesuffix(".json") for f in os.listdir(model_dir) if f.endswith(".json")]
+    return [f.removesuffix(".json") for f in os.listdir(model_dir) if f.endswith(".json") and not f.startswith("plot_options")]
 
 def load_variable_config(model_id, version_str=None, master=None):
     # Determine software version
