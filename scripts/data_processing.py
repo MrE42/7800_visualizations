@@ -570,6 +570,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
                     ax_lines[var].remove()
                     del ax_lines[var]
 
+            toolbar.home()
+
             y = df[var]
             x_data = df[time_col]
             if break_on_gaps_enabled:
@@ -583,6 +585,8 @@ def embed_plot_7800_data(parent_frame, filepaths):
             update_listbox()
             update_legend()
             rescale()
+            toolbar.push_current()
+            toolbar.update()
 
         if var in subplot_assignments:
             # Remove from current subplot
@@ -606,7 +610,6 @@ def embed_plot_7800_data(parent_frame, filepaths):
 
         layout_subplots()
         rescale()
-        canvas.draw()
 
     textbox.bind("<ButtonRelease-1>", lambda e: "break")  # Ignore default selection effect
 
