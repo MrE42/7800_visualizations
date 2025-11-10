@@ -50,7 +50,11 @@ class App:
         row.columnconfigure(1, weight=1)  # Allow the entry field to expand nicely
 
     def browse_data(self):
-        paths = filedialog.askopenfilenames(filetypes=[("7800 .data Files", "*.data")])
+        paths = filedialog.askopenfilenames(filetypes=[
+            ("7800 Data Files", "*.data *.data.txt"),
+            ("All File Types", "*")
+        ])
+
         if paths:
             self.data_paths = list(paths)
             num_files = len(self.data_paths)
