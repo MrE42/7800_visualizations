@@ -51,7 +51,7 @@ class App:
 
     def browse_data(self):
         paths = filedialog.askopenfilenames(filetypes=[
-            ("7800 Data Files", "*.data *.data.txt"),
+            ("7800 Data Files", "*.data"),
             ("All File Types", "*")
         ])
 
